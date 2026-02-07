@@ -1,0 +1,1 @@
+# dashboard-widget-manager
