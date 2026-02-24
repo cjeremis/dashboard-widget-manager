@@ -1,0 +1,122 @@
+<?php
+/**
+ * Settings Class
+ *
+ * Handles plugin settings.
+ *
+ * @package Dashboard_Widget_Manager
+ * @since 1.0.0
+ */
+
+// Exit if accessed directly.
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Settings class.
+ *
+ * Manages plugin settings.
+ */
+class DWM_Settings {
+
+	use DWM_Singleton;
+	use DWM_AJAX_Handler;
+
+	/**
+	 * Register settings.
+	 */
+	public function register_settings() {
+		register_setting(
+			'dwm_settings_group',
+			'dwm_settings',
+			array( $this, 'sanitize_settings' )
+		);
+	}
+
+	/**
+	 * Sanitize settings.
+	 *
+	 * @param array $settings Settings array.
+	 * @return array Sanitized settings.
+	 */
+	public function sanitize_settings( $settings ) {
+		return DWM_Sanitizer::sanitize_settings( $settings );
+	}
+
+	/**
+	 * Save settings via AJAX.
+	 */
+	public function ajax_save_settings() {
+		if ( ! $this->verify_ajax_request() ) {
+			return;
+		}
+
+		$settings = isset( $_POST['settings'] ) ? wp_unslash( $_POST['settings'] ) : array();
+
+		if ( empty( $settings ) ) {
+			$this->send_error( __( 'Settings data is required.', 'dashboard-widget-manager' ), 400 );
+			return;
+		}
+
+		// Sanitize settings.
+		$settings = DWM_Sanitizer::sanitize_settings( $settings );
+
+		// Validate settings.
+		$errors = DWM_Validator::validate_settings( $settings );
+		if ( ! empty( $errors ) ) {
+			$this->send_error( implode( ' ', $errors ), 400, array( 'errors' => $errors ) );
+			return;
+		}
+
+		// Save settings.
+		$data   = DWM_Data::get_instance();
+		$result = $data->update_settings( $settings );
+
+		if ( ! $result ) {
+			$this->send_error( __( 'Failed to save settings.', 'dashboard-widget-manager' ), 500 );
+			return;
+		}
+
+		$this->send_success( __( 'Settings saved successfully.', 'dashboard-widget-manager' ) );
+	}
+
+	/**
+	 * Reset settings via AJAX.
+	 */
+	public function ajax_reset_settings() {
+		if ( ! $this->verify_ajax_request() ) {
+			return;
+		}
+
+		$default_settings = $this->get_default_settings();
+
+		$data   = DWM_Data::get_instance();
+		$result = $data->update_settings( $default_settings );
+
+		if ( ! $result ) {
+			$this->send_error( __( 'Failed to reset settings.', 'dashboard-widget-manager' ), 500 );
+			return;
+		}
+
+		$this->send_success(
+			__( 'Settings reset successfully.', 'dashboard-widget-manager' ),
+			array( 'settings' => $default_settings )
+		);
+	}
+
+	/**
+	 * Get default settings.
+	 *
+	 * @return array Default settings.
+	 */
+	public function get_default_settings() {
+		return array(
+			'enable_caching'         => true,
+			'default_cache_duration' => 300,
+			'max_execution_time'     => 30,
+			'enable_query_logging'   => false,
+			'allowed_tables'         => '',
+		);
+	}
+}

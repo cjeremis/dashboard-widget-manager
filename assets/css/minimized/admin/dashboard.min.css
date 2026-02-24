@@ -1,0 +1,11 @@
+/*!
+ * Dashboard Widget Manager - Dashboard Styles
+ *
+ * Page-specific styles for the Dashboard admin page.
+ *
+ * @package    Dashboard_Widget_Manager
+ * @version    1.0.0
+ * @copyright  2026 TopDevAmerica
+ * @license    GPL-2.0+
+ */
+.dwm-dashboard{padding:20px 0}.dwm-welcome{background:linear-gradient(135deg, #2271b1 0%, #135e96 100%);color:#fff;padding:30px;border-radius:8px;margin-bottom:30px}.dwm-welcome h2{color:#fff;margin:0 0 10px 0;font-size:28px}.dwm-welcome p{margin:0;font-size:16px;opacity:.9}.dwm-statistics{margin-bottom:30px}.dwm-statistics h2{font-size:22px;margin-bottom:15px}.dwm-quick-actions{background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:30px}.dwm-quick-actions h2{margin-top:0;font-size:18px}.dwm-recent-widgets{background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px}.dwm-recent-widgets h2{margin-top:0;font-size:18px;border-bottom:1px solid #dcdcde;padding-bottom:10px;margin-bottom:15px}.dwm-results-table{width:100%;border-collapse:collapse;margin:10px 0}.dwm-results-table th{background:#f6f7f7;font-weight:600;text-align:left;padding:10px;border-bottom:2px solid #c3c4c7}.dwm-results-table td{padding:10px;border-bottom:1px solid #dcdcde}.dwm-results-table tbody tr:hover{background:#f6f7f7}.dwm-widget-content{padding:15px}.dwm-widget-content h3{margin-top:0}
