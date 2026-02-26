@@ -65,6 +65,17 @@ class DWM_Validator {
 			$errors       = array_merge( $errors, $cache_errors );
 		}
 
+		// Validate max execution time.
+		if ( isset( $widget['max_execution_time'] ) ) {
+			if ( ! is_numeric( $widget['max_execution_time'] ) ) {
+				$errors[] = __( 'Maximum execution time must be a number.', 'dashboard-widget-manager' );
+			} elseif ( $widget['max_execution_time'] < 1 ) {
+				$errors[] = __( 'Maximum execution time must be at least 1 second.', 'dashboard-widget-manager' );
+			} elseif ( $widget['max_execution_time'] > 60 ) {
+				$errors[] = __( 'Maximum execution time cannot exceed 60 seconds.', 'dashboard-widget-manager' );
+			}
+		}
+
 		// Validate widget order.
 		if ( isset( $widget['widget_order'] ) && $widget['widget_order'] < 0 ) {
 			$errors[] = __( 'Widget order must be a positive number.', 'dashboard-widget-manager' );
@@ -145,22 +156,57 @@ class DWM_Validator {
 	 * @return array Array of error messages. Empty if valid.
 	 */
 	public static function validate_settings( $settings ) {
+		return array();
+	}
+
+	/**
+	 * Validate import data structure.
+	 *
+	 * @param array $data Import data array.
+	 * @return array Array of error messages. Empty if valid.
+	 */
+	public static function validate_import_data( array $data ) {
 		$errors = array();
 
-		// Validate default cache duration.
-		if ( isset( $settings['default_cache_duration'] ) ) {
-			$cache_errors = self::validate_cache_duration( $settings['default_cache_duration'] );
-			$errors       = array_merge( $errors, $cache_errors );
+		// If plugin identifier is present, it must match.
+		if ( isset( $data['plugin'] ) && 'dashboard-widget-manager' !== $data['plugin'] ) {
+			$errors[] = __( 'Invalid export file: plugin identifier mismatch.', 'dashboard-widget-manager' );
 		}
 
-		// Validate max execution time.
-		if ( isset( $settings['max_execution_time'] ) ) {
-			if ( ! is_numeric( $settings['max_execution_time'] ) ) {
-				$errors[] = __( 'Maximum execution time must be a number.', 'dashboard-widget-manager' );
-			} elseif ( $settings['max_execution_time'] < 1 ) {
-				$errors[] = __( 'Maximum execution time must be at least 1 second.', 'dashboard-widget-manager' );
-			} elseif ( $settings['max_execution_time'] > 60 ) {
-				$errors[] = __( 'Maximum execution time cannot exceed 60 seconds.', 'dashboard-widget-manager' );
+		// If version is present, check compatibility.
+		if ( isset( $data['version'] ) && version_compare( $data['version'], DWM_VERSION, '>' ) ) {
+			$errors[] = sprintf(
+				/* translators: %1$s: file version, %2$s: installed version */
+				__( 'Import file is from a newer version (%1$s) than installed (%2$s).', 'dashboard-widget-manager' ),
+				esc_html( $data['version'] ),
+				DWM_VERSION
+			);
+		}
+
+		// Check that at least one valid data type is present.
+		$valid_keys = array( 'widgets', 'settings' );
+		$has_data   = false;
+		foreach ( $valid_keys as $key ) {
+			if ( isset( $data[ $key ] ) ) {
+				$has_data = true;
+				break;
+			}
+		}
+
+		if ( ! $has_data ) {
+			$errors[] = __( 'Invalid import file: no valid data found.', 'dashboard-widget-manager' );
+		}
+
+		// Validate widgets structure if present.
+		if ( isset( $data['widgets'] ) && is_array( $data['widgets'] ) ) {
+			foreach ( $data['widgets'] as $index => $widget ) {
+				if ( ! is_array( $widget ) ) {
+					$errors[] = sprintf(
+						/* translators: %d: widget index */
+						__( 'Invalid widget at index %d: must be an array.', 'dashboard-widget-manager' ),
+						$index
+					);
+				}
 			}
 		}
 

@@ -1,26 +1,29 @@
 <?php
 /**
- * Dashboard Template
+ * Admin Page Template - Dashboard
  *
- * Displays the plugin dashboard.
+ * Handles markup rendering for the dashboard admin page template.
  *
  * @package Dashboard_Widget_Manager
  * @since 1.0.0
+ * @version 1.0.0
  */
 
 // Exit if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+// Page wrapper configuration
+$current_page       = 'dashboard-widget-manager';
+$header_title       = __( 'Dashboard Widget Manager', 'dashboard-widget-manager' );
+$header_description = __( 'Create and manage custom WordPress dashboard widgets powered by SQL, PHP, HTML, CSS, and JavaScript.', 'dashboard-widget-manager' );
+$topbar_actions     = [];
+
+include __DIR__ . '/partials/page-wrapper-start.php';
 ?>
 
-<div class="wrap dwm-dashboard dwm-page-wrapper">
-	<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
-
-	<div class="dwm-welcome">
-		<h2><?php esc_html_e( 'Widget Manager', 'dashboard-widget-manager' ); ?></h2>
-		<p><?php esc_html_e( 'Create WP Dashboard widgets with SQL, PHP, HTML, CSS, and JS.', 'dashboard-widget-manager' ); ?></p>
-	</div>
+<div class="dwm-page-content">
 
 	<div class="dwm-statistics">
 		<h2><?php esc_html_e( 'Statistics', 'dashboard-widget-manager' ); ?></h2>
@@ -38,18 +41,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="dwm-stat-label"><?php esc_html_e( 'Cache Entries', 'dashboard-widget-manager' ); ?></div>
 			</div>
 		</div>
-	</div>
-
-	<div class="dwm-quick-actions">
-		<h2><?php esc_html_e( 'Quick Actions', 'dashboard-widget-manager' ); ?></h2>
-		<p>
-			<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-widgets' ) ); ?>" class="button button-primary button-large">
-				<?php esc_html_e( 'Create New Widget', 'dashboard-widget-manager' ); ?>
-			</a>
-			<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-settings' ) ); ?>" class="button button-large">
-				<?php esc_html_e( 'Settings', 'dashboard-widget-manager' ); ?>
-			</a>
-		</p>
 	</div>
 
 	<div class="dwm-recent-widgets">
@@ -85,4 +76,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<p><?php esc_html_e( 'No widgets created yet.', 'dashboard-widget-manager' ); ?></p>
 		<?php endif; ?>
 	</div>
+
 </div>
+
+<?php include __DIR__ . '/partials/page-wrapper-end.php'; ?>

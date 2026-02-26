@@ -37,6 +37,8 @@ class DWM_Data {
 	 */
 	const DEFAULT_CACHE_DURATION = 300;
 
+	const VALID_STATUSES = array( 'publish', 'draft', 'archived', 'trash' );
+
 	/**
 	 * Get plugin settings.
 	 *
@@ -44,11 +46,7 @@ class DWM_Data {
 	 */
 	public function get_settings() {
 		$defaults = array(
-			'enable_caching'         => true,
-			'default_cache_duration' => self::DEFAULT_CACHE_DURATION,
-			'max_execution_time'     => 30,
-			'enable_query_logging'   => false,
-			'allowed_tables'         => '',
+			'allowed_tables' => '',
 		);
 
 		$repository = DWM_Settings_Repository::get_instance();
@@ -59,6 +57,27 @@ class DWM_Data {
 		$settings = $repository->get( 'settings', $defaults );
 
 		return wp_parse_args( $settings, $defaults );
+	}
+
+	/**
+	 * Get allowed tables as an array.
+	 *
+	 * Parses the allowed_tables setting from newline-separated string to array.
+	 * Returns empty array when no restriction is set (all tables allowed).
+	 *
+	 * @return array Array of allowed table names. Empty = all allowed.
+	 */
+	public function get_allowed_tables() {
+		$settings = $this->get_settings();
+		$raw      = isset( $settings['allowed_tables'] ) ? $settings['allowed_tables'] : '';
+
+		if ( empty( $raw ) ) {
+			return array();
+		}
+
+		$tables = explode( "\n", $raw );
+		$tables = array_map( 'trim', $tables );
+		return array_values( array_filter( $tables ) );
 	}
 
 	/**
@@ -175,21 +194,47 @@ class DWM_Data {
 
 		$table = $wpdb->prefix . self::TABLE_WIDGETS;
 
-		// Prepare data for insertion.
+		// Derive status and enabled.
+		if ( isset( $widget_data['status'] ) ) {
+			$status  = $widget_data['status'];
+			$enabled = ( 'publish' === $status ) ? 1 : 0;
+		} elseif ( ! empty( $widget_data['enabled'] ) ) {
+			$status  = 'publish';
+			$enabled = 1;
+		} else {
+			$status  = 'draft';
+			$enabled = 0;
+		}
+
 		$data = array(
-			'name'           => isset( $widget_data['name'] ) ? $widget_data['name'] : '',
-			'description'    => isset( $widget_data['description'] ) ? $widget_data['description'] : '',
-			'sql_query'      => isset( $widget_data['sql_query'] ) ? $widget_data['sql_query'] : '',
-			'template'       => isset( $widget_data['template'] ) ? $widget_data['template'] : '',
-			'styles'         => isset( $widget_data['styles'] ) ? $widget_data['styles'] : '',
-			'scripts'        => isset( $widget_data['scripts'] ) ? $widget_data['scripts'] : '',
-			'enabled'        => isset( $widget_data['enabled'] ) ? (int) $widget_data['enabled'] : 0,
-			'widget_order'   => isset( $widget_data['widget_order'] ) ? (int) $widget_data['widget_order'] : 0,
-			'cache_duration' => isset( $widget_data['cache_duration'] ) ? (int) $widget_data['cache_duration'] : 0,
-			'created_by'     => get_current_user_id(),
+			'name'                 => isset( $widget_data['name'] ) ? $widget_data['name'] : '',
+			'description'          => isset( $widget_data['description'] ) ? $widget_data['description'] : '',
+			'sql_query'            => isset( $widget_data['sql_query'] ) ? $widget_data['sql_query'] : '',
+			'template'             => isset( $widget_data['template'] ) ? $widget_data['template'] : '',
+			'styles'               => isset( $widget_data['styles'] ) ? $widget_data['styles'] : '',
+			'scripts'              => isset( $widget_data['scripts'] ) ? $widget_data['scripts'] : '',
+			'chart_type'           => isset( $widget_data['chart_type'] ) ? sanitize_text_field( $widget_data['chart_type'] ) : '',
+			'chart_config'         => isset( $widget_data['chart_config'] ) ? $widget_data['chart_config'] : null,
+			'builder_config'       => isset( $widget_data['builder_config'] ) ? $widget_data['builder_config'] : null,
+			'status'               => $status,
+			'enabled'              => $enabled,
+			'widget_order'         => isset( $widget_data['widget_order'] ) ? (int) $widget_data['widget_order'] : 0,
+			'cache_duration'       => isset( $widget_data['cache_duration'] ) ? (int) $widget_data['cache_duration'] : 300,
+			'enable_caching'       => isset( $widget_data['enable_caching'] ) ? (int) $widget_data['enable_caching'] : 1,
+			'max_execution_time'   => isset( $widget_data['max_execution_time'] ) ? (int) $widget_data['max_execution_time'] : 30,
+			'enable_query_logging' => isset( $widget_data['enable_query_logging'] ) ? (int) $widget_data['enable_query_logging'] : 0,
+			'is_demo'              => isset( $widget_data['is_demo'] ) ? (int) $widget_data['is_demo'] : 0,
+			'created_by'           => get_current_user_id(),
 		);
 
-		$format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d' );
+		if ( 'publish' === $status ) {
+			$data['first_published_at'] = current_time( 'mysql' );
+		}
+
+		$format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d' );
+		if ( 'publish' === $status ) {
+			$format[] = '%s';
+		}
 
 		$result = $wpdb->insert( $table, $data, $format );
 
@@ -239,7 +284,12 @@ class DWM_Data {
 			$data['scripts'] = $widget_data['scripts'];
 		}
 
-		if ( isset( $widget_data['enabled'] ) ) {
+		if ( isset( $widget_data['status'] ) ) {
+			$data['status']  = $widget_data['status'];
+			$data['enabled'] = ( 'publish' === $widget_data['status'] ) ? 1 : 0;
+		}
+
+		if ( isset( $widget_data['enabled'] ) && ! isset( $widget_data['status'] ) ) {
 			$data['enabled'] = (int) $widget_data['enabled'];
 		}
 
@@ -249,6 +299,34 @@ class DWM_Data {
 
 		if ( isset( $widget_data['cache_duration'] ) ) {
 			$data['cache_duration'] = (int) $widget_data['cache_duration'];
+		}
+
+		if ( isset( $widget_data['enable_caching'] ) ) {
+			$data['enable_caching'] = (int) $widget_data['enable_caching'];
+		}
+
+		if ( isset( $widget_data['max_execution_time'] ) ) {
+			$data['max_execution_time'] = (int) $widget_data['max_execution_time'];
+		}
+
+		if ( isset( $widget_data['enable_query_logging'] ) ) {
+			$data['enable_query_logging'] = (int) $widget_data['enable_query_logging'];
+		}
+
+		if ( isset( $widget_data['first_published_at'] ) ) {
+			$data['first_published_at'] = $widget_data['first_published_at'];
+		}
+
+		if ( array_key_exists( 'chart_type', $widget_data ) ) {
+			$data['chart_type'] = sanitize_text_field( $widget_data['chart_type'] );
+		}
+
+		if ( array_key_exists( 'chart_config', $widget_data ) ) {
+			$data['chart_config'] = $widget_data['chart_config'];
+		}
+
+		if ( array_key_exists( 'builder_config', $widget_data ) ) {
+			$data['builder_config'] = $widget_data['builder_config'];
 		}
 
 		if ( empty( $data ) ) {
@@ -295,14 +373,55 @@ class DWM_Data {
 	}
 
 	/**
-	 * Toggle widget status (enable/disable).
+	 * Update widget status.
 	 *
-	 * @param int  $id Widget ID.
-	 * @param bool $enabled Enabled status.
+	 * @param int    $id     Widget ID.
+	 * @param string $status New status (publish, draft, archived, trash).
 	 * @return bool True on success, false on failure.
 	 */
-	public function toggle_widget_status( $id, $enabled ) {
-		return $this->update_widget( $id, array( 'enabled' => $enabled ) );
+	public function update_widget_status( $id, $status ) {
+		if ( ! in_array( $status, self::VALID_STATUSES, true ) ) {
+			return false;
+		}
+
+		$update_data = array(
+			'status'  => $status,
+			'enabled' => ( 'publish' === $status ) ? 1 : 0,
+		);
+
+		if ( 'publish' === $status ) {
+			$widget = $this->get_widget( $id );
+			if ( $widget && empty( $widget['first_published_at'] ) ) {
+				$update_data['first_published_at'] = current_time( 'mysql' );
+			}
+		}
+
+		return $this->update_widget( $id, $update_data );
+	}
+
+	public function trash_widget( $id ) {
+		return $this->update_widget_status( $id, 'trash' );
+	}
+
+	public function cleanup_trash() {
+		global $wpdb;
+
+		$table  = $wpdb->prefix . self::TABLE_WIDGETS;
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( 30 * DAY_IN_SECONDS ) );
+
+		$ids = $wpdb->get_col( $wpdb->prepare(
+			"SELECT id FROM {$table} WHERE status = 'trash' AND updated_at < %s",
+			$cutoff
+		) );
+
+		foreach ( $ids as $id ) {
+			$this->clear_widget_cache( (int) $id );
+		}
+
+		$wpdb->query( $wpdb->prepare(
+			"DELETE FROM {$table} WHERE status = 'trash' AND updated_at < %s",
+			$cutoff
+		) );
 	}
 
 	/**
@@ -430,6 +549,133 @@ class DWM_Data {
 		$table = $wpdb->prefix . self::TABLE_CACHE;
 
 		$wpdb->query( "DELETE FROM {$table} WHERE expires_at < NOW()" );
+	}
+
+	/**
+	 * Export all plugin data.
+	 *
+	 * @return array Export data array.
+	 */
+	public function export_all() {
+		$widgets  = $this->get_widgets();
+		$settings = $this->get_settings();
+
+		return array(
+			'plugin'      => 'dashboard-widget-manager',
+			'version'     => DWM_VERSION,
+			'exported_at' => current_time( 'mysql' ),
+			'site_url'    => get_site_url(),
+			'widgets'     => $widgets,
+			'settings'    => $settings,
+		);
+	}
+
+	/**
+	 * Import all plugin data.
+	 *
+	 * @param array $data  Import data array.
+	 * @param bool  $merge Whether to merge with existing data (false = replace).
+	 * @return bool True on success, false on failure.
+	 */
+	public function import_all( array $data, bool $merge = false ) {
+		$success = true;
+
+		// Import settings.
+		if ( isset( $data['settings'] ) && is_array( $data['settings'] ) ) {
+			if ( $merge ) {
+				$current  = $this->get_settings();
+				$settings = wp_parse_args( $data['settings'], $current );
+			} else {
+				$settings = $data['settings'];
+			}
+			$settings = DWM_Sanitizer::sanitize_settings( $settings );
+			$success  = $success && $this->update_settings( $settings );
+		}
+
+		// Import widgets.
+		if ( isset( $data['widgets'] ) && is_array( $data['widgets'] ) ) {
+			if ( ! $merge ) {
+				// Replace: clear existing widgets first.
+				$existing = $this->get_widgets();
+				foreach ( $existing as $widget ) {
+					$this->delete_widget( (int) $widget['id'] );
+				}
+			}
+
+			foreach ( $data['widgets'] as $widget ) {
+				if ( ! is_array( $widget ) ) {
+					continue;
+				}
+
+				// Strip ID for re-insert.
+				unset( $widget['id'], $widget['created_at'], $widget['updated_at'] );
+
+				if ( $merge ) {
+					// Check for existing widget with same name.
+					$existing_widget = $this->get_widget_by_name( $widget['name'] ?? '' );
+					if ( $existing_widget ) {
+						$this->update_widget( (int) $existing_widget['id'], $widget );
+						continue;
+					}
+				}
+
+				$result  = $this->create_widget( $widget );
+				$success = $success && ( false !== $result );
+			}
+		}
+
+		return $success;
+	}
+
+	/**
+	 * Get all demo widgets.
+	 *
+	 * @return array Array of demo widget rows.
+	 */
+	public function get_demo_widgets() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . self::TABLE_WIDGETS;
+		$sql   = "SELECT * FROM {$table} WHERE is_demo = 1 ORDER BY widget_order ASC, name ASC";
+
+		$results = $wpdb->get_results( $sql, ARRAY_A );
+
+		return $results ? $results : array();
+	}
+
+	/**
+	 * Check if any demo widgets exist.
+	 *
+	 * @return bool True if demo widgets exist.
+	 */
+	public function has_demo_widgets() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . self::TABLE_WIDGETS;
+		$count = $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE is_demo = 1" );
+
+		return ( (int) $count ) > 0;
+	}
+
+	/**
+	 * Delete all demo widgets.
+	 *
+	 * @return int Number of widgets deleted.
+	 */
+	public function delete_demo_widgets() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . self::TABLE_WIDGETS;
+
+		// Get IDs first to clear caches.
+		$ids = $wpdb->get_col( "SELECT id FROM {$table} WHERE is_demo = 1" );
+		foreach ( $ids as $id ) {
+			$this->clear_widget_cache( (int) $id );
+		}
+
+		$result = $wpdb->delete( $table, array( 'is_demo' => 1 ), array( '%d' ) );
+
+		return $result !== false ? (int) $result : 0;
 	}
 
 	/**

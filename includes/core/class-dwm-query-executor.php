@@ -48,10 +48,20 @@ class DWM_Query_Executor {
 		// Parse query variables.
 		$query = $this->parse_query_variables( $query );
 
-		// Check cache.
-		$settings       = $data->get_settings();
-		$cache_enabled  = $settings['enable_caching'];
-		$cache_duration = $widget['cache_duration'] > 0 ? $widget['cache_duration'] : $settings['default_cache_duration'];
+		// Check table whitelist against parsed query (real table names after variable substitution).
+		$allowed_tables = $data->get_allowed_tables();
+		if ( ! empty( $allowed_tables ) ) {
+			$table_errors = DWM_Validator::validate_query_tables( $query, $allowed_tables );
+			if ( ! empty( $table_errors ) ) {
+				return new WP_Error( 'table_not_allowed', implode( ' ', $table_errors ) );
+			}
+		}
+
+		// Per-widget settings.
+		$cache_enabled       = ! empty( $widget['enable_caching'] );
+		$cache_duration      = isset( $widget['cache_duration'] ) ? (int) $widget['cache_duration'] : 300;
+		$max_execution_time  = isset( $widget['max_execution_time'] ) ? (int) $widget['max_execution_time'] : 30;
+		$enable_logging      = ! empty( $widget['enable_query_logging'] );
 
 		if ( $cache_enabled && ! $force_refresh && $cache_duration > 0 ) {
 			$cache_key = $this->generate_cache_key( $widget_id, $query );
@@ -63,7 +73,7 @@ class DWM_Query_Executor {
 		}
 
 		// Execute query.
-		$results = $this->execute_sql( $query );
+		$results = $this->execute_sql( $query, $max_execution_time, $enable_logging );
 
 		if ( is_wp_error( $results ) ) {
 			return $results;
@@ -127,15 +137,12 @@ class DWM_Query_Executor {
 	 * Execute SQL query.
 	 *
 	 * @param string $query SQL query to execute.
+	 * @param int    $max_time Maximum execution time in seconds.
+	 * @param bool   $enable_logging Whether to log query execution.
 	 * @return array|WP_Error Query results or error.
 	 */
-	private function execute_sql( $query ) {
+	private function execute_sql( $query, $max_time = 30, $enable_logging = false ) {
 		global $wpdb;
-
-		// Get max execution time from settings.
-		$data     = DWM_Data::get_instance();
-		$settings = $data->get_settings();
-		$max_time = isset( $settings['max_execution_time'] ) ? (int) $settings['max_execution_time'] : 30;
 
 		// Start timing.
 		$start_time = microtime( true );
@@ -175,7 +182,7 @@ class DWM_Query_Executor {
 		}
 
 		// Log query if logging is enabled.
-		if ( $settings['enable_query_logging'] ) {
+		if ( $enable_logging ) {
 			$this->log_query( $query, $execution_time, count( $results ) );
 		}
 
@@ -262,6 +269,16 @@ class DWM_Query_Executor {
 
 		// Parse variables.
 		$query = $this->parse_query_variables( $query );
+
+		// Check table whitelist against parsed query.
+		$data           = DWM_Data::get_instance();
+		$allowed_tables = $data->get_allowed_tables();
+		if ( ! empty( $allowed_tables ) ) {
+			$table_errors = DWM_Validator::validate_query_tables( $query, $allowed_tables );
+			if ( ! empty( $table_errors ) ) {
+				return new WP_Error( 'table_not_allowed', implode( ' ', $table_errors ) );
+			}
+		}
 
 		// Execute query.
 		$results = $this->execute_sql( $query );

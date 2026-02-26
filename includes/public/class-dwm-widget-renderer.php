@@ -64,12 +64,26 @@ class DWM_Widget_Renderer {
 		// Apply template.
 		$output = $this->apply_template( $widget['template'], $results, $widget );
 
-		// Enqueue widget assets.
-		$this->enqueue_widget_assets( $widget );
+		// Append chart if configured.
+		$chart_type   = isset( $widget['chart_type'] ) ? $widget['chart_type'] : '';
+		$chart_config = isset( $widget['chart_config'] ) ? $widget['chart_config'] : '';
+		if ( ! empty( $chart_type ) && ! empty( $chart_config ) ) {
+			$output .= $this->render_chart( $widget, $results );
+		}
 
-		// Output widget.
+		// Output widget container with inline styles and scripts.
 		echo '<div class="dwm-widget-content" data-widget-id="' . esc_attr( $widget['id'] ) . '">';
+
+		if ( ! empty( $widget['styles'] ) ) {
+			echo '<style>' . $this->scope_widget_styles( $widget['styles'], $widget['id'] ) . '</style>';
+		}
+
 		echo $output;
+
+		if ( ! empty( $widget['scripts'] ) ) {
+			echo '<script>' . $widget['scripts'] . '</script>';
+		}
+
 		echo '</div>';
 	}
 
@@ -123,6 +137,101 @@ class DWM_Widget_Renderer {
 
 		// Replace template variables.
 		$output = $this->replace_template_variables( $output, $results );
+
+		return $output;
+	}
+
+	/**
+	 * Render chart canvas and initialization script.
+	 *
+	 * @param array $widget  Widget data.
+	 * @param array $results Query results.
+	 * @return string HTML canvas + inline script.
+	 */
+	private function render_chart( $widget, $results ) {
+		$config = json_decode( $widget['chart_config'], true );
+		if ( ! is_array( $config ) ) {
+			return '';
+		}
+
+		$chart_type   = sanitize_text_field( $widget['chart_type'] );
+		$label_column = isset( $config['label_column'] ) ? $config['label_column'] : '';
+		$data_columns = isset( $config['data_columns'] ) && is_array( $config['data_columns'] ) ? $config['data_columns'] : array();
+		$chart_title  = isset( $config['title'] ) ? $config['title'] : '';
+		$show_legend  = isset( $config['show_legend'] ) ? (bool) $config['show_legend'] : true;
+
+		if ( empty( $label_column ) || empty( $data_columns ) ) {
+			return '';
+		}
+
+		// Extract labels and dataset values.
+		$labels = array();
+		foreach ( $results as $row ) {
+			$labels[] = isset( $row[ $label_column ] ) ? $row[ $label_column ] : '';
+		}
+
+		$palette = array(
+			'rgba(102,126,234,0.8)',
+			'rgba(118,75,162,0.8)',
+			'rgba(40,167,69,0.8)',
+			'rgba(255,193,7,0.8)',
+			'rgba(220,53,69,0.8)',
+			'rgba(23,162,184,0.8)',
+			'rgba(253,126,20,0.8)',
+			'rgba(111,66,193,0.8)',
+		);
+
+		$datasets = array();
+		foreach ( $data_columns as $i => $col ) {
+			$values = array();
+			foreach ( $results as $row ) {
+				$values[] = isset( $row[ $col ] ) ? (float) $row[ $col ] : 0;
+			}
+			$color      = $palette[ $i % count( $palette ) ];
+			$datasets[] = array(
+				'label'           => $col,
+				'data'            => $values,
+				'backgroundColor' => $color,
+				'borderColor'     => str_replace( '0.8', '1', $color ),
+				'borderWidth'     => 1,
+			);
+		}
+
+		$canvas_id   = 'dwm-chart-' . esc_attr( $widget['id'] );
+		$chart_data  = wp_json_encode(
+			array(
+				'type'    => $chart_type,
+				'data'    => array(
+					'labels'   => $labels,
+					'datasets' => $datasets,
+				),
+				'options' => array(
+					'responsive'          => true,
+					'maintainAspectRatio' => true,
+					'plugins'             => array(
+						'legend' => array( 'display' => $show_legend ),
+						'title'  => array(
+							'display' => ! empty( $chart_title ),
+							'text'    => $chart_title,
+						),
+					),
+				),
+			)
+		);
+
+		$output  = '<div class="dwm-chart-wrapper" style="margin-top:12px;">';
+		$output .= '<canvas id="' . $canvas_id . '"></canvas>';
+		$output .= '</div>';
+		$output .= '<script>';
+		$output .= '(function(){';
+		$output .= 'function dwmInitChart(){';
+		$output .= 'var ctx=document.getElementById(' . wp_json_encode( $canvas_id ) . ');';
+		$output .= 'if(ctx&&typeof Chart!=="undefined"){new Chart(ctx,' . $chart_data . ');}';
+		$output .= '}';
+		$output .= 'if(typeof Chart!=="undefined"){dwmInitChart();}';
+		$output .= 'else{window.addEventListener("load",dwmInitChart);}';
+		$output .= '})();';
+		$output .= '</script>';
 
 		return $output;
 	}
@@ -188,33 +297,49 @@ class DWM_Widget_Renderer {
 	}
 
 	/**
-	 * Enqueue widget-specific assets.
+	 * Scope widget styles by prefixing each rule's selectors.
 	 *
-	 * @param array $widget Widget data.
-	 */
-	private function enqueue_widget_assets( $widget ) {
-		// Enqueue styles.
-		if ( ! empty( $widget['styles'] ) ) {
-			$styles = $this->scope_widget_styles( $widget['styles'], $widget['id'] );
-			wp_add_inline_style( 'dashicons', $styles );
-		}
-
-		// Enqueue scripts.
-		if ( ! empty( $widget['scripts'] ) ) {
-			$scripts = $widget['scripts'];
-			wp_add_inline_script( 'jquery', $scripts );
-		}
-	}
-
-	/**
-	 * Scope widget styles to widget container.
+	 * Converts flat CSS rules to scoped rules so widget styles
+	 * don't bleed outside the widget container.
 	 *
-	 * @param string $styles CSS styles.
-	 * @param int    $widget_id Widget ID.
-	 * @return string Scoped styles.
+	 * @param string $styles    Raw CSS string.
+	 * @param int    $widget_id Widget ID for scoping.
+	 * @return string Scoped CSS.
 	 */
 	private function scope_widget_styles( $styles, $widget_id ) {
-		// Wrap styles with widget-specific scope.
-		return '.dwm-widget-content[data-widget-id="' . $widget_id . '"] { ' . $styles . ' }';
+		$scope  = '.dwm-widget-content[data-widget-id="' . $widget_id . '"]';
+		$parts  = explode( '}', $styles );
+		$result = '';
+
+		foreach ( $parts as $part ) {
+			$part = trim( $part );
+			if ( empty( $part ) ) {
+				continue;
+			}
+
+			$brace = strpos( $part, '{' );
+			if ( false === $brace ) {
+				continue;
+			}
+
+			$selector_raw = trim( substr( $part, 0, $brace ) );
+			$props        = trim( substr( $part, $brace + 1 ) );
+
+			// Pass @-rules (keyframes, media queries) through unchanged.
+			if ( str_starts_with( $selector_raw, '@' ) ) {
+				$result .= $part . "}\n";
+				continue;
+			}
+
+			$selectors = array_map( 'trim', explode( ',', $selector_raw ) );
+			$prefixed  = array_map(
+				fn( $s ) => $scope . ' ' . $s,
+				array_filter( $selectors, 'strlen' )
+			);
+
+			$result .= implode( ', ', $prefixed ) . " {\n  " . $props . "\n}\n";
+		}
+
+		return $result;
 	}
 }

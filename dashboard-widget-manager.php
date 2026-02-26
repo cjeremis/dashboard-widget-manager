@@ -87,6 +87,11 @@ function dwm_autoloader( $class_name ) {
 // Register the autoloader.
 spl_autoload_register( 'dwm_autoloader' );
 
+// Load CLI commands if WP-CLI is available.
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	require_once DWM_PLUGIN_DIR . 'includes/core/class-dwm-cli.php';
+}
+
 /**
  * Check PHP version.
  */
@@ -180,6 +185,11 @@ function dwm_deactivate() {
 }
 
 register_deactivation_hook( __FILE__, 'dwm_deactivate' );
+
+add_action( 'admin_init', function() {
+	require_once DWM_PLUGIN_DIR . 'includes/class-dwm-activator.php';
+	DWM_Activator::maybe_upgrade();
+} );
 
 /**
  * Initialize the plugin.

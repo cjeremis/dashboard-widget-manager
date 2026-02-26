@@ -64,5 +64,10 @@ class DWM_Deactivator {
 		if ( $timestamp ) {
 			wp_unschedule_event( $timestamp, 'dwm_cleanup_cache' );
 		}
+
+		$timestamp = wp_next_scheduled( 'dwm_cleanup_trash' );
+		if ( $timestamp ) {
+			wp_unschedule_event( $timestamp, 'dwm_cleanup_trash' );
+		}
 	}
 }

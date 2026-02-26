@@ -78,7 +78,39 @@ class DWM_Settings {
 			return;
 		}
 
-		$this->send_success( __( 'Settings saved successfully.', 'dashboard-widget-manager' ) );
+		// Check if any active widgets are now using tables outside the new whitelist.
+		$allowed_tables = $data->get_allowed_tables();
+		$affected       = array();
+
+		if ( ! empty( $allowed_tables ) ) {
+			$active_widgets = $data->get_widgets( true );
+			foreach ( $active_widgets as $widget ) {
+				if ( ! empty( $widget['sql_query'] ) ) {
+					$table_errors = DWM_Validator::validate_query_tables( $widget['sql_query'], $allowed_tables );
+					if ( ! empty( $table_errors ) ) {
+						$affected[] = $widget['name'];
+					}
+				}
+			}
+		}
+
+		$response = array();
+		if ( ! empty( $affected ) ) {
+			$response['warning']          = sprintf(
+				/* translators: 1: number of widgets, 2: comma-separated widget names */
+				_n(
+					'%1$d active widget is now using a table outside the whitelist and will fail to execute: %2$s',
+					'%1$d active widgets are now using tables outside the whitelist and will fail to execute: %2$s',
+					count( $affected ),
+					'dashboard-widget-manager'
+				),
+				count( $affected ),
+				implode( ', ', array_map( function( $n ) { return '"' . $n . '"'; }, $affected ) )
+			);
+			$response['affected_widgets'] = $affected;
+		}
+
+		$this->send_success( __( 'Settings saved successfully.', 'dashboard-widget-manager' ), $response );
 	}
 
 	/**
@@ -112,11 +144,7 @@ class DWM_Settings {
 	 */
 	public function get_default_settings() {
 		return array(
-			'enable_caching'         => true,
-			'default_cache_duration' => 300,
-			'max_execution_time'     => 30,
-			'enable_query_logging'   => false,
-			'allowed_tables'         => '',
+			'allowed_tables' => '',
 		);
 	}
 }

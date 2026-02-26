@@ -88,8 +88,18 @@ class DWM_Widget_Manager {
 			return;
 		}
 
+		// Check table whitelist.
+		$data           = DWM_Data::get_instance();
+		$allowed_tables = $data->get_allowed_tables();
+		if ( ! empty( $allowed_tables ) && ! empty( $widget_data['sql_query'] ) ) {
+			$table_errors = DWM_Validator::validate_query_tables( $widget_data['sql_query'], $allowed_tables );
+			if ( ! empty( $table_errors ) ) {
+				$this->send_error( implode( ' ', $table_errors ), 400, array( 'errors' => $table_errors ) );
+				return;
+			}
+		}
+
 		// Create widget.
-		$data      = DWM_Data::get_instance();
 		$widget_id = $data->create_widget( $widget_data );
 
 		if ( ! $widget_id ) {
@@ -134,8 +144,18 @@ class DWM_Widget_Manager {
 			return;
 		}
 
+		// Check table whitelist.
+		$data           = DWM_Data::get_instance();
+		$allowed_tables = $data->get_allowed_tables();
+		if ( ! empty( $allowed_tables ) && ! empty( $widget_data['sql_query'] ) ) {
+			$table_errors = DWM_Validator::validate_query_tables( $widget_data['sql_query'], $allowed_tables );
+			if ( ! empty( $table_errors ) ) {
+				$this->send_error( implode( ' ', $table_errors ), 400, array( 'errors' => $table_errors ) );
+				return;
+			}
+		}
+
 		// Update widget.
-		$data   = DWM_Data::get_instance();
 		$result = $data->update_widget( $widget_id, $widget_data );
 
 		if ( ! $result ) {
@@ -147,7 +167,7 @@ class DWM_Widget_Manager {
 	}
 
 	/**
-	 * Delete widget via AJAX.
+	 * Soft-delete widget (move to trash) via AJAX.
 	 */
 	public function ajax_delete_widget() {
 		if ( ! $this->verify_ajax_request() ) {
@@ -162,26 +182,25 @@ class DWM_Widget_Manager {
 		}
 
 		$data   = DWM_Data::get_instance();
-		$result = $data->delete_widget( $widget_id );
+		$result = $data->trash_widget( $widget_id );
 
 		if ( ! $result ) {
-			$this->send_error( __( 'Failed to delete widget.', 'dashboard-widget-manager' ), 500 );
+			$this->send_error( __( 'Failed to trash widget.', 'dashboard-widget-manager' ), 500 );
 			return;
 		}
 
-		$this->send_success( __( 'Widget deleted successfully.', 'dashboard-widget-manager' ) );
+		$this->send_success( __( 'Widget moved to trash.', 'dashboard-widget-manager' ) );
 	}
 
 	/**
-	 * Toggle widget status via AJAX.
+	 * Permanently delete widget via AJAX.
 	 */
-	public function ajax_toggle_widget() {
+	public function ajax_permanent_delete() {
 		if ( ! $this->verify_ajax_request() ) {
 			return;
 		}
 
 		$widget_id = isset( $_POST['widget_id'] ) ? absint( $_POST['widget_id'] ) : 0;
-		$enabled   = isset( $_POST['enabled'] ) ? (bool) $_POST['enabled'] : false;
 
 		if ( ! $widget_id ) {
 			$this->send_error( __( 'Widget ID is required.', 'dashboard-widget-manager' ), 400 );
@@ -189,15 +208,88 @@ class DWM_Widget_Manager {
 		}
 
 		$data   = DWM_Data::get_instance();
-		$result = $data->toggle_widget_status( $widget_id, $enabled );
+		$widget = $data->get_widget( $widget_id );
 
-		if ( ! $result ) {
-			$this->send_error( __( 'Failed to toggle widget status.', 'dashboard-widget-manager' ), 500 );
+		if ( ! $widget || 'trash' !== $widget['status'] ) {
+			$this->send_error( __( 'Only trashed widgets can be permanently deleted.', 'dashboard-widget-manager' ), 400 );
 			return;
 		}
 
+		$result = $data->delete_widget( $widget_id );
+
+		if ( ! $result ) {
+			$this->send_error( __( 'Failed to delete widget.', 'dashboard-widget-manager' ), 500 );
+			return;
+		}
+
+		$this->send_success( __( 'Widget permanently deleted.', 'dashboard-widget-manager' ) );
+	}
+
+	/**
+	 * Empty trash (permanently delete all trashed widgets) via AJAX.
+	 */
+	public function ajax_empty_trash() {
+		if ( ! $this->verify_ajax_request() ) {
+			return;
+		}
+
+		$data    = DWM_Data::get_instance();
+		$widgets = $data->get_widgets();
+		$count   = 0;
+
+		foreach ( $widgets as $widget ) {
+			if ( 'trash' === ( $widget['status'] ?? '' ) ) {
+				$data->delete_widget( (int) $widget['id'] );
+				$count++;
+			}
+		}
+
 		$this->send_success(
-			$enabled ? __( 'Widget enabled successfully.', 'dashboard-widget-manager' ) : __( 'Widget disabled successfully.', 'dashboard-widget-manager' )
+			sprintf( __( '%d widget(s) permanently deleted.', 'dashboard-widget-manager' ), $count ),
+			array( 'count' => $count )
+		);
+	}
+
+	/**
+	 * Toggle widget status via AJAX (publish/draft toggle).
+	 */
+	public function ajax_toggle_widget() {
+		if ( ! $this->verify_ajax_request() ) {
+			return;
+		}
+
+		$widget_id = isset( $_POST['widget_id'] ) ? absint( $_POST['widget_id'] ) : 0;
+		$status    = isset( $_POST['status'] ) ? sanitize_text_field( $_POST['status'] ) : '';
+
+		if ( ! $widget_id ) {
+			$this->send_error( __( 'Widget ID is required.', 'dashboard-widget-manager' ), 400 );
+			return;
+		}
+
+		if ( ! in_array( $status, array( 'publish', 'draft' ), true ) ) {
+			$this->send_error( __( 'Invalid status for toggle.', 'dashboard-widget-manager' ), 400 );
+			return;
+		}
+
+		$data   = DWM_Data::get_instance();
+		$result = $data->update_widget_status( $widget_id, $status );
+
+		if ( ! $result ) {
+			$this->send_error( __( 'Failed to update widget status.', 'dashboard-widget-manager' ), 500 );
+			return;
+		}
+
+		$widget        = $data->get_widget( $widget_id );
+		$response_data = array( 'status' => $status );
+		if ( $widget && ! empty( $widget['first_published_at'] ) ) {
+			$response_data['first_published_at'] = date_i18n( 'M j, y', strtotime( $widget['first_published_at'] ) );
+		}
+
+		$this->send_success(
+			'publish' === $status
+				? __( 'Widget published.', 'dashboard-widget-manager' )
+				: __( 'Widget set to draft.', 'dashboard-widget-manager' ),
+			$response_data
 		);
 	}
 
@@ -257,6 +349,132 @@ class DWM_Widget_Manager {
 	}
 
 	/**
+	 * Preview wizard configuration via AJAX.
+	 */
+	public function ajax_preview_wizard() {
+		if ( ! $this->verify_ajax_request() ) {
+			return;
+		}
+
+		$wizard_data = isset( $_POST['wizard_data'] ) ? wp_unslash( $_POST['wizard_data'] ) : array();
+
+		if ( empty( $wizard_data ) || ! is_array( $wizard_data ) ) {
+			$this->send_error( __( 'Wizard data is required.', 'dashboard-widget-manager' ), 400 );
+			return;
+		}
+
+		// Build configuration from wizard data.
+		$config = array();
+
+		// Step config contains table and columns.
+		if ( isset( $wizard_data['stepConfig'] ) && is_array( $wizard_data['stepConfig'] ) ) {
+			$step_config = $wizard_data['stepConfig'];
+			if ( isset( $step_config['table'] ) ) {
+				$config['table'] = $step_config['table'];
+			}
+			if ( isset( $step_config['columns'] ) && is_array( $step_config['columns'] ) ) {
+				$config['columns'] = $step_config['columns'];
+			}
+		}
+
+		// Joins.
+		if ( isset( $wizard_data['joins'] ) && is_array( $wizard_data['joins'] ) ) {
+			$config['joins'] = $wizard_data['joins'];
+		}
+
+		// Conditions.
+		if ( isset( $wizard_data['conditions'] ) && is_array( $wizard_data['conditions'] ) ) {
+			$config['conditions'] = $wizard_data['conditions'];
+		}
+
+		// Sort columns and limit.
+		if ( isset( $wizard_data['sorts'] ) && is_array( $wizard_data['sorts'] ) ) {
+			$config['sorts'] = $wizard_data['sorts'];
+		}
+		if ( isset( $wizard_data['limit'] ) ) {
+			$config['limit'] = $wizard_data['limit'];
+		}
+
+		// Display mode.
+		if ( isset( $wizard_data['displayMode'] ) ) {
+			$config['display_mode'] = $wizard_data['displayMode'];
+		}
+
+		// Use query builder to build SQL from config.
+		$query_builder = DWM_Query_Builder::get_instance();
+		$result        = $query_builder->build_query_from_config( $config );
+
+		if ( is_wp_error( $result ) ) {
+			$this->send_error( $result->get_error_message(), 400 );
+			return;
+		}
+
+		$sql = $result['sql'];
+
+		// Execute the query to get preview data.
+		global $wpdb;
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		if ( $wpdb->last_error ) {
+			$this->send_error( $wpdb->last_error, 400 );
+			return;
+		}
+
+		// Render preview HTML.
+		$html = $this->render_preview_html( $rows, $config );
+
+		$this->send_success(
+			__( 'Preview generated successfully.', 'dashboard-widget-manager' ),
+			array(
+				'html'  => $html,
+				'query' => $sql,
+			)
+		);
+	}
+
+	/**
+	 * Render preview HTML from query results.
+	 *
+	 * @param array $rows   Query results.
+	 * @param array $config Widget configuration.
+	 * @return string HTML output.
+	 */
+	private function render_preview_html( $rows, $config ) {
+		if ( empty( $rows ) ) {
+			return '<div class="dwm-widget-no-data"><p>' . esc_html__( 'No data found.', 'dashboard-widget-manager' ) . '</p></div>';
+		}
+
+		$display_mode = isset( $config['display_mode'] ) ? $config['display_mode'] : 'table';
+
+		// For now, just render as a simple table.
+		// Chart rendering can be added later if needed.
+		ob_start();
+		?>
+		<div class="dwm-widget-preview-table">
+			<table class="wp-list-table widefat fixed striped">
+				<thead>
+					<tr>
+						<?php foreach ( array_keys( $rows[0] ) as $col ) : ?>
+							<th><?php echo esc_html( $col ); ?></th>
+						<?php endforeach; ?>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $rows as $row ) : ?>
+						<tr>
+							<?php foreach ( $row as $value ) : ?>
+								<td><?php echo esc_html( $value ); ?></td>
+							<?php endforeach; ?>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/**
 	 * Validate query via AJAX.
 	 */
 	public function ajax_validate_query() {
@@ -286,6 +504,17 @@ class DWM_Widget_Manager {
 		if ( ! empty( $validation_errors ) ) {
 			$this->send_error( implode( ' ', $validation_errors ), 400 );
 			return;
+		}
+
+		// Check table whitelist against the parsed query (real table names after variable substitution).
+		$data           = DWM_Data::get_instance();
+		$allowed_tables = $data->get_allowed_tables();
+		if ( ! empty( $allowed_tables ) ) {
+			$table_errors = DWM_Validator::validate_query_tables( $parsed_query, $allowed_tables );
+			if ( ! empty( $table_errors ) ) {
+				$this->send_error( implode( ' ', $table_errors ), 400 );
+				return;
+			}
 		}
 
 		// Test query execution.

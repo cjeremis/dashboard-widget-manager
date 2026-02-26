@@ -63,6 +63,8 @@ class DWM_Loader {
 		// Admin assets.
 		$this->add_action( 'admin_enqueue_scripts', 'DWM_Admin', 'enqueue_styles' );
 		$this->add_action( 'admin_enqueue_scripts', 'DWM_Admin', 'enqueue_scripts' );
+		$this->add_action( 'admin_enqueue_scripts', 'DWM_Admin', 'enqueue_chartjs' );
+		$this->add_action( 'admin_enqueue_scripts', 'DWM_Admin', 'inject_dashboard_button' );
 
 		// Settings.
 		$this->add_action( 'admin_init', 'DWM_Settings', 'register_settings' );
@@ -73,17 +75,53 @@ class DWM_Loader {
 		$this->add_action( 'wp_ajax_dwm_create_widget', 'DWM_Widget_Manager', 'ajax_create_widget' );
 		$this->add_action( 'wp_ajax_dwm_update_widget', 'DWM_Widget_Manager', 'ajax_update_widget' );
 		$this->add_action( 'wp_ajax_dwm_delete_widget', 'DWM_Widget_Manager', 'ajax_delete_widget' );
+		$this->add_action( 'wp_ajax_dwm_permanent_delete', 'DWM_Widget_Manager', 'ajax_permanent_delete' );
+		$this->add_action( 'wp_ajax_dwm_empty_trash', 'DWM_Widget_Manager', 'ajax_empty_trash' );
 		$this->add_action( 'wp_ajax_dwm_toggle_widget', 'DWM_Widget_Manager', 'ajax_toggle_widget' );
 		$this->add_action( 'wp_ajax_dwm_reorder_widgets', 'DWM_Widget_Manager', 'ajax_reorder_widgets' );
 		$this->add_action( 'wp_ajax_dwm_preview_widget', 'DWM_Widget_Manager', 'ajax_preview_widget' );
+		$this->add_action( 'wp_ajax_dwm_preview_wizard', 'DWM_Widget_Manager', 'ajax_preview_wizard' );
 		$this->add_action( 'wp_ajax_dwm_validate_query', 'DWM_Widget_Manager', 'ajax_validate_query' );
+
+		// AJAX - Notifications.
+		$this->add_action( 'wp_ajax_dwm_get_notifications', 'DWM_Notifications_AJAX', 'ajax_get_notifications' );
+		$this->add_action( 'wp_ajax_dwm_delete_notification', 'DWM_Notifications_AJAX', 'ajax_delete_notification' );
+		$this->add_action( 'wp_ajax_dwm_get_notification_count', 'DWM_Notifications_AJAX', 'ajax_get_notification_count' );
+		$this->add_action( 'wp_ajax_dwm_mark_read', 'DWM_Notifications_AJAX', 'ajax_mark_read' );
+		$this->add_action( 'wp_ajax_dwm_mark_unread', 'DWM_Notifications_AJAX', 'ajax_mark_unread' );
+
+		// AJAX - Support.
+		$this->add_action( 'wp_ajax_dwm_submit_ticket', 'DWM_Support_AJAX', 'submit_ticket' );
+		$this->add_action( 'wp_ajax_dwm_get_tickets', 'DWM_Support_AJAX', 'get_tickets' );
+		$this->add_action( 'wp_ajax_dwm_get_ticket_detail', 'DWM_Support_AJAX', 'get_ticket_detail' );
+		$this->add_action( 'wp_ajax_dwm_submit_reply', 'DWM_Support_AJAX', 'submit_reply' );
 
 		// AJAX - Settings.
 		$this->add_action( 'wp_ajax_dwm_save_settings', 'DWM_Settings', 'ajax_save_settings' );
 		$this->add_action( 'wp_ajax_dwm_reset_settings', 'DWM_Settings', 'ajax_reset_settings' );
 
+		// AJAX - License.
+		$this->add_action( 'wp_ajax_dwm_pro_activate_license', 'DWM_License_Manager', 'ajax_activate' );
+		$this->add_action( 'wp_ajax_dwm_pro_deactivate_license', 'DWM_License_Manager', 'ajax_deactivate' );
+
+		// AJAX - Export / Import.
+		$this->add_action( 'wp_ajax_dwm_export', 'DWM_Export_Import', 'ajax_export' );
+		$this->add_action( 'wp_ajax_dwm_import', 'DWM_Export_Import', 'ajax_import' );
+		$this->add_action( 'wp_ajax_dwm_validate_import', 'DWM_Export_Import', 'ajax_validate_import' );
+		$this->add_action( 'wp_ajax_dwm_reset_data', 'DWM_Export_Import', 'ajax_reset_data' );
+
+		// AJAX - Demo Data.
+		$this->add_action( 'wp_ajax_dwm_import_demo_data', 'DWM_Demo_Data', 'ajax_import_demo_data' );
+		$this->add_action( 'wp_ajax_dwm_delete_demo_data', 'DWM_Demo_Data', 'ajax_delete_demo_data' );
+
+		// AJAX - Query Builder.
+		$this->add_action( 'wp_ajax_dwm_get_tables', 'DWM_Query_Builder', 'ajax_get_tables' );
+		$this->add_action( 'wp_ajax_dwm_get_table_columns', 'DWM_Query_Builder', 'ajax_get_table_columns' );
+		$this->add_action( 'wp_ajax_dwm_build_query', 'DWM_Query_Builder', 'ajax_build_query' );
+
 		// Cron.
 		$this->add_action( 'dwm_cleanup_cache', 'DWM_Data', 'cleanup_expired_cache' );
+		$this->add_action( 'dwm_cleanup_trash', 'DWM_Data', 'cleanup_trash' );
 	}
 
 	/**

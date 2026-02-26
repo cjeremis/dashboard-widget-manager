@@ -180,6 +180,11 @@ class DWM_Sanitizer {
 		return absint( $order );
 	}
 
+	public static function sanitize_status( $status ) {
+		$valid = array( 'publish', 'draft', 'archived', 'trash' );
+		return in_array( $status, $valid, true ) ? $status : 'draft';
+	}
+
 	/**
 	 * Sanitize widget data array.
 	 *
@@ -225,6 +230,23 @@ class DWM_Sanitizer {
 			$sanitized['cache_duration'] = self::sanitize_cache_duration( $widget_data['cache_duration'] );
 		}
 
+		if ( isset( $widget_data['enable_caching'] ) ) {
+			$sanitized['enable_caching'] = self::sanitize_boolean( $widget_data['enable_caching'] );
+		}
+
+		if ( isset( $widget_data['max_execution_time'] ) ) {
+			$max = absint( $widget_data['max_execution_time'] );
+			$sanitized['max_execution_time'] = min( max( 1, $max ), 60 );
+		}
+
+		if ( isset( $widget_data['enable_query_logging'] ) ) {
+			$sanitized['enable_query_logging'] = self::sanitize_boolean( $widget_data['enable_query_logging'] );
+		}
+
+		if ( isset( $widget_data['status'] ) ) {
+			$sanitized['status'] = self::sanitize_status( $widget_data['status'] );
+		}
+
 		return $sanitized;
 	}
 
@@ -236,22 +258,6 @@ class DWM_Sanitizer {
 	 */
 	public static function sanitize_settings( $settings ) {
 		$sanitized = array();
-
-		if ( isset( $settings['enable_caching'] ) ) {
-			$sanitized['enable_caching'] = self::sanitize_boolean( $settings['enable_caching'] );
-		}
-
-		if ( isset( $settings['default_cache_duration'] ) ) {
-			$sanitized['default_cache_duration'] = self::sanitize_cache_duration( $settings['default_cache_duration'] );
-		}
-
-		if ( isset( $settings['max_execution_time'] ) ) {
-			$sanitized['max_execution_time'] = absint( $settings['max_execution_time'] );
-		}
-
-		if ( isset( $settings['enable_query_logging'] ) ) {
-			$sanitized['enable_query_logging'] = self::sanitize_boolean( $settings['enable_query_logging'] );
-		}
 
 		if ( isset( $settings['allowed_tables'] ) ) {
 			// Sanitize each table name.
