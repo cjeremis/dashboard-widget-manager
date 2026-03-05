@@ -128,7 +128,7 @@ class DWM_Pro_Feature_Gate {
 
 		// Global dev bypass cookie for TopDevAmerica plugins
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		if ( isset( $_COOKIE['topdevamerica-pro'] ) && 'true' === $_COOKIE['topdevamerica-pro'] ) {
+		if ( defined( 'TDA_DEV_MODE' ) && TDA_DEV_MODE && isset( $_COOKIE['topdevamerica-pro'] ) && 'true' === $_COOKIE['topdevamerica-pro'] ) {
 			return true;
 		}
 
@@ -190,12 +190,15 @@ class DWM_Pro_Feature_Gate {
 		// For GET requests, body is empty string
 		$signature = hash_hmac( 'sha256', $timestamp . '.', $api_secret );
 
+		// sslverify is always true in production. Define DWM_DEV_DISABLE_SSLVERIFY=true only in local dev environments.
+		$sslverify = defined( 'DWM_DEV_DISABLE_SSLVERIFY' ) && DWM_DEV_DISABLE_SSLVERIFY ? false : true;
+
 		$response = wp_remote_get(
 			add_query_arg( 'license_key', rawurlencode( $license_key ), $api_url ),
 			[
 				'timeout'   => 5,
 				'blocking'  => true,
-				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+				'sslverify' => $sslverify,
 				'headers'   => [
 					'X-WP-Nonce'      => $api_nonce,
 					'X-DWM-Timestamp' => $timestamp,

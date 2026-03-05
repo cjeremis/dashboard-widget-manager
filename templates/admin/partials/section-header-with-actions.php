@@ -37,15 +37,6 @@ if ( $help_modal_target && empty( $actions_html ) ) {
 	include __DIR__ . '/help-trigger.php';
 	unset( $text, $modal_target, $variant, $icon, $extra_class, $attrs, $help_icon_classes, $help_attrs );
 	$actions_html = ob_get_clean();
-} elseif ( ! $help_modal_target && empty( $actions_html ) ) {
-	// No modal target — render a placeholder help icon with no action.
-	ob_start();
-	?>
-	<button type="button" class="dwm-section-help-icon dwm-help-icon-btn" aria-label="<?php echo esc_attr( $help_icon_label ); ?>">
-		<span class="dashicons dashicons-editor-help"></span>
-	</button>
-	<?php
-	$actions_html = ob_get_clean();
 }
 ?>
 <div class="dwm-section-header <?php echo esc_attr( $extra_class ?? '' ); ?>">

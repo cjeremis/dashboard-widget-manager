@@ -46,7 +46,11 @@ class DWM_Data {
 	 */
 	public function get_settings() {
 		$defaults = array(
-			'allowed_tables' => '',
+			'excluded_tables'             => '',
+			'hide_help_dropdown'          => 0,
+			'hide_screen_options'         => 0,
+			'hidden_dashboard_widgets'    => '',
+			'support_data_sharing_opt_in' => 0,
 		);
 
 		$repository = DWM_Settings_Repository::get_instance();
@@ -55,21 +59,22 @@ class DWM_Data {
 		}
 
 		$settings = $repository->get( 'settings', $defaults );
+		unset( $settings['allowed_tables'] );
 
 		return wp_parse_args( $settings, $defaults );
 	}
 
 	/**
-	 * Get allowed tables as an array.
+	 * Get excluded tables as an array.
 	 *
-	 * Parses the allowed_tables setting from newline-separated string to array.
-	 * Returns empty array when no restriction is set (all tables allowed).
+	 * Parses the excluded_tables setting from newline-separated string to array.
+	 * Returns empty array when no tables are excluded (all tables accessible).
 	 *
-	 * @return array Array of allowed table names. Empty = all allowed.
+	 * @return array Array of excluded table names. Empty = none excluded.
 	 */
-	public function get_allowed_tables() {
+	public function get_excluded_tables() {
 		$settings = $this->get_settings();
-		$raw      = isset( $settings['allowed_tables'] ) ? $settings['allowed_tables'] : '';
+		$raw      = isset( $settings['excluded_tables'] ) ? $settings['excluded_tables'] : '';
 
 		if ( empty( $raw ) ) {
 			return array();
@@ -92,7 +97,12 @@ class DWM_Data {
 			return false;
 		}
 
-		return $repository->set( 'settings', $settings, DWM_Settings_Repository::GROUP_GENERAL );
+		// Merge incoming (possibly partial) settings with existing stored values
+		// so that autosave of a single toggle doesn't wipe other settings.
+		$existing = $repository->get( 'settings', array() );
+		$merged   = array_merge( $existing, $settings );
+
+		return $repository->set( 'settings', $merged, DWM_Settings_Repository::GROUP_GENERAL );
 	}
 
 	/**
@@ -137,10 +147,10 @@ class DWM_Data {
 		$sql = "SELECT * FROM {$table}";
 
 		if ( $enabled_only ) {
-			$sql .= " WHERE enabled = 1";
+			$sql .= " WHERE enabled = 1 AND status = 'publish'";
 		}
 
-		$sql .= " ORDER BY widget_order ASC, name ASC";
+		$sql .= " ORDER BY created_at DESC, id DESC";
 
 		$results = $wpdb->get_results( $sql, ARRAY_A );
 
@@ -184,6 +194,66 @@ class DWM_Data {
 	}
 
 	/**
+	 * Get widget by UUID.
+	 *
+	 * @param string $uuid Widget UUID.
+	 * @return array|null Widget data or null if not found.
+	 */
+	public function get_widget_by_uuid( string $uuid ) {
+		global $wpdb;
+
+		$table = $wpdb->prefix . self::TABLE_WIDGETS;
+		$sql   = $wpdb->prepare( "SELECT * FROM {$table} WHERE uuid = %s", $uuid );
+
+		return $wpdb->get_row( $sql, ARRAY_A );
+	}
+
+	/**
+	 * Get widgets by name.
+	 *
+	 * @param string $name Widget name.
+	 * @return array<int, array<string, mixed>> Widgets with matching name.
+	 */
+	public function get_widgets_by_name( string $name ): array {
+		global $wpdb;
+
+		$table = $wpdb->prefix . self::TABLE_WIDGETS;
+		$sql   = $wpdb->prepare( "SELECT * FROM {$table} WHERE name = %s ORDER BY id ASC", $name );
+		$rows  = $wpdb->get_results( $sql, ARRAY_A );
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Normalize widget UUID to a valid RFC-4122 v4 string or empty string.
+	 *
+	 * @param mixed $uuid Raw UUID value.
+	 * @return string
+	 */
+	private function normalize_widget_uuid( $uuid ): string {
+		if ( ! is_string( $uuid ) ) {
+			return '';
+		}
+
+		$uuid = trim( strtolower( $uuid ) );
+		if ( '' === $uuid ) {
+			return '';
+		}
+
+		if ( function_exists( 'wp_is_uuid' ) ) {
+			if ( wp_is_uuid( $uuid, 4 ) || wp_is_uuid( $uuid ) ) {
+				return $uuid;
+			}
+		}
+
+		if ( preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $uuid ) ) {
+			return $uuid;
+		}
+
+		return '';
+	}
+
+	/**
 	 * Create a new widget.
 	 *
 	 * @param array $widget_data Widget data array.
@@ -206,33 +276,44 @@ class DWM_Data {
 			$enabled = 0;
 		}
 
+		$uuid = $this->normalize_widget_uuid( $widget_data['uuid'] ?? '' );
+		if ( '' === $uuid ) {
+			$uuid = wp_generate_uuid4();
+		}
+
 		$data = array(
+			'uuid'                 => $uuid,
 			'name'                 => isset( $widget_data['name'] ) ? $widget_data['name'] : '',
 			'description'          => isset( $widget_data['description'] ) ? $widget_data['description'] : '',
 			'sql_query'            => isset( $widget_data['sql_query'] ) ? $widget_data['sql_query'] : '',
 			'template'             => isset( $widget_data['template'] ) ? $widget_data['template'] : '',
 			'styles'               => isset( $widget_data['styles'] ) ? $widget_data['styles'] : '',
 			'scripts'              => isset( $widget_data['scripts'] ) ? $widget_data['scripts'] : '',
+			'no_results_template'  => isset( $widget_data['no_results_template'] ) ? $widget_data['no_results_template'] : '',
 			'chart_type'           => isset( $widget_data['chart_type'] ) ? sanitize_text_field( $widget_data['chart_type'] ) : '',
 			'chart_config'         => isset( $widget_data['chart_config'] ) ? $widget_data['chart_config'] : null,
 			'builder_config'       => isset( $widget_data['builder_config'] ) ? $widget_data['builder_config'] : null,
+			'output_config'        => isset( $widget_data['output_config'] ) ? $widget_data['output_config'] : null,
 			'status'               => $status,
 			'enabled'              => $enabled,
 			'widget_order'         => isset( $widget_data['widget_order'] ) ? (int) $widget_data['widget_order'] : 0,
 			'cache_duration'       => isset( $widget_data['cache_duration'] ) ? (int) $widget_data['cache_duration'] : 300,
 			'enable_caching'       => isset( $widget_data['enable_caching'] ) ? (int) $widget_data['enable_caching'] : 1,
+			'auto_refresh'         => isset( $widget_data['auto_refresh'] ) ? (int) $widget_data['auto_refresh'] : 0,
 			'max_execution_time'   => isset( $widget_data['max_execution_time'] ) ? (int) $widget_data['max_execution_time'] : 30,
 			'enable_query_logging' => isset( $widget_data['enable_query_logging'] ) ? (int) $widget_data['enable_query_logging'] : 0,
 			'is_demo'              => isset( $widget_data['is_demo'] ) ? (int) $widget_data['is_demo'] : 0,
 			'created_by'           => get_current_user_id(),
 		);
 
-		if ( 'publish' === $status ) {
+		if ( ! empty( $widget_data['first_published_at'] ) ) {
+			$data['first_published_at'] = sanitize_text_field( $widget_data['first_published_at'] );
+		} elseif ( 'publish' === $status ) {
 			$data['first_published_at'] = current_time( 'mysql' );
 		}
 
-		$format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d' );
-		if ( 'publish' === $status ) {
+		$format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d' );
+		if ( array_key_exists( 'first_published_at', $data ) ) {
 			$format[] = '%s';
 		}
 
@@ -264,6 +345,13 @@ class DWM_Data {
 			$data['name'] = $widget_data['name'];
 		}
 
+		if ( isset( $widget_data['uuid'] ) ) {
+			$uuid = $this->normalize_widget_uuid( $widget_data['uuid'] );
+			if ( '' !== $uuid ) {
+				$data['uuid'] = $uuid;
+			}
+		}
+
 		if ( isset( $widget_data['description'] ) ) {
 			$data['description'] = $widget_data['description'];
 		}
@@ -282,6 +370,10 @@ class DWM_Data {
 
 		if ( isset( $widget_data['scripts'] ) ) {
 			$data['scripts'] = $widget_data['scripts'];
+		}
+
+		if ( isset( $widget_data['no_results_template'] ) ) {
+			$data['no_results_template'] = $widget_data['no_results_template'];
 		}
 
 		if ( isset( $widget_data['status'] ) ) {
@@ -303,6 +395,10 @@ class DWM_Data {
 
 		if ( isset( $widget_data['enable_caching'] ) ) {
 			$data['enable_caching'] = (int) $widget_data['enable_caching'];
+		}
+
+		if ( isset( $widget_data['auto_refresh'] ) ) {
+			$data['auto_refresh'] = (int) $widget_data['auto_refresh'];
 		}
 
 		if ( isset( $widget_data['max_execution_time'] ) ) {
@@ -329,15 +425,32 @@ class DWM_Data {
 			$data['builder_config'] = $widget_data['builder_config'];
 		}
 
+		if ( array_key_exists( 'output_config', $widget_data ) ) {
+			$data['output_config'] = $widget_data['output_config'];
+		}
+
 		if ( empty( $data ) ) {
 			return false;
+		}
+
+		$integer_fields = array(
+			'enabled',
+			'widget_order',
+			'cache_duration',
+			'auto_refresh',
+			'max_execution_time',
+			'enable_query_logging',
+		);
+		$formats = array();
+		foreach ( $data as $field_key => $field_value ) {
+			$formats[] = in_array( $field_key, $integer_fields, true ) ? '%d' : '%s';
 		}
 
 		$result = $wpdb->update(
 			$table,
 			$data,
 			array( 'id' => $id ),
-			null,
+			$formats,
 			array( '%d' )
 		);
 
@@ -399,6 +512,10 @@ class DWM_Data {
 		return $this->update_widget( $id, $update_data );
 	}
 
+	public function set_widget_enabled( $id, $enabled ) {
+		return $this->update_widget( $id, array( 'enabled' => $enabled ? 1 : 0 ) );
+	}
+
 	public function trash_widget( $id ) {
 		return $this->update_widget_status( $id, 'trash' );
 	}
@@ -422,36 +539,6 @@ class DWM_Data {
 			"DELETE FROM {$table} WHERE status = 'trash' AND updated_at < %s",
 			$cutoff
 		) );
-	}
-
-	/**
-	 * Reorder widgets.
-	 *
-	 * @param array $order_map Array of widget ID => order pairs.
-	 * @return bool True on success, false on failure.
-	 */
-	public function reorder_widgets( $order_map ) {
-		global $wpdb;
-
-		$table = $wpdb->prefix . self::TABLE_WIDGETS;
-
-		$success = true;
-
-		foreach ( $order_map as $widget_id => $order ) {
-			$result = $wpdb->update(
-				$table,
-				array( 'widget_order' => (int) $order ),
-				array( 'id' => (int) $widget_id ),
-				array( '%d' ),
-				array( '%d' )
-			);
-
-			if ( $result === false ) {
-				$success = false;
-			}
-		}
-
-		return $success;
 	}
 
 	/**
@@ -552,21 +639,111 @@ class DWM_Data {
 	}
 
 	/**
+	 * Clear all Dashboard Widget Manager caches.
+	 *
+	 * This purges query cache rows and plugin transients, and resets
+	 * in-request static caches used by plugin repositories.
+	 *
+	 * @return bool True on success, false if any DB cache purge fails.
+	 */
+	public function clear_all_caches() {
+		global $wpdb;
+
+		$success = true;
+		$table   = $wpdb->prefix . self::TABLE_CACHE;
+
+		$truncate_result = $wpdb->query( "TRUNCATE TABLE {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( false === $truncate_result ) {
+			$delete_result = $wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( false === $delete_result ) {
+				$success = false;
+			}
+		}
+
+		// Legacy/fallback transient key.
+		delete_transient( 'dwm_query_cache' );
+
+		$this->delete_dwm_transients();
+		$this->delete_dwm_site_transients();
+
+		if ( class_exists( 'DWM_Features' ) ) {
+			DWM_Features::clear_cache();
+		}
+
+		if ( class_exists( 'DWM_Settings_Repository' ) ) {
+			DWM_Settings_Repository::get_instance()->clear_cache();
+		}
+
+		/**
+		 * Allow extensions/add-ons to clear their own DWM-related caches.
+		 */
+		do_action( 'dwm_clear_caches' );
+
+		return $success;
+	}
+
+	/**
+	 * Delete all transient rows whose key starts with `dwm_`.
+	 *
+	 * @return void
+	 */
+	private function delete_dwm_transients() {
+		global $wpdb;
+
+		$transient_like = $wpdb->esc_like( '_transient_dwm_' ) . '%';
+		$timeout_like   = $wpdb->esc_like( '_transient_timeout_dwm_' ) . '%';
+
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+				$transient_like,
+				$timeout_like
+			)
+		);
+	}
+
+	/**
+	 * Delete all multisite transient rows whose key starts with `dwm_`.
+	 *
+	 * @return void
+	 */
+	private function delete_dwm_site_transients() {
+		global $wpdb;
+
+		if ( ! is_multisite() || empty( $wpdb->sitemeta ) ) {
+			return;
+		}
+
+		$site_transient_like = $wpdb->esc_like( '_site_transient_dwm_' ) . '%';
+		$site_timeout_like   = $wpdb->esc_like( '_site_transient_timeout_dwm_' ) . '%';
+
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->sitemeta} WHERE meta_key LIKE %s OR meta_key LIKE %s",
+				$site_transient_like,
+				$site_timeout_like
+			)
+		);
+	}
+
+	/**
 	 * Export all plugin data.
 	 *
 	 * @return array Export data array.
 	 */
 	public function export_all() {
-		$widgets  = $this->get_widgets();
-		$settings = $this->get_settings();
+		$widgets       = $this->get_widgets();
+		$settings      = $this->get_settings();
+		$notifications = DWM_Notifications::get_instance()->get_user_notifications();
 
 		return array(
-			'plugin'      => 'dashboard-widget-manager',
-			'version'     => DWM_VERSION,
-			'exported_at' => current_time( 'mysql' ),
-			'site_url'    => get_site_url(),
-			'widgets'     => $widgets,
-			'settings'    => $settings,
+			'plugin'        => 'dashboard-widget-manager',
+			'version'       => DWM_VERSION,
+			'exported_at'   => current_time( 'mysql' ),
+			'site_url'      => get_site_url(),
+			'widgets'       => $widgets,
+			'settings'      => $settings,
+			'notifications' => $notifications,
 		);
 	}
 
@@ -575,10 +752,12 @@ class DWM_Data {
 	 *
 	 * @param array $data  Import data array.
 	 * @param bool  $merge Whether to merge with existing data (false = replace).
-	 * @return bool True on success, false on failure.
+	 * @return bool|WP_Error True on success, WP_Error on failure.
 	 */
 	public function import_all( array $data, bool $merge = false ) {
-		$success = true;
+		global $wpdb;
+
+		$in_transaction = false !== $wpdb->query( 'START TRANSACTION' );
 
 		// Import settings.
 		if ( isset( $data['settings'] ) && is_array( $data['settings'] ) ) {
@@ -589,7 +768,12 @@ class DWM_Data {
 				$settings = $data['settings'];
 			}
 			$settings = DWM_Sanitizer::sanitize_settings( $settings );
-			$success  = $success && $this->update_settings( $settings );
+			if ( ! $this->update_settings( $settings ) ) {
+				if ( $in_transaction ) {
+					$wpdb->query( 'ROLLBACK' );
+				}
+				return new WP_Error( 'import_settings_failed', __( 'Failed to import settings.', 'dashboard-widget-manager' ) );
+			}
 		}
 
 		// Import widgets.
@@ -598,33 +782,168 @@ class DWM_Data {
 				// Replace: clear existing widgets first.
 				$existing = $this->get_widgets();
 				foreach ( $existing as $widget ) {
-					$this->delete_widget( (int) $widget['id'] );
+					if ( ! $this->delete_widget( (int) $widget['id'] ) ) {
+						if ( $in_transaction ) {
+							$wpdb->query( 'ROLLBACK' );
+						}
+						return new WP_Error( 'import_delete_failed', __( 'Failed to clear existing widgets before import.', 'dashboard-widget-manager' ) );
+					}
 				}
 			}
 
 			foreach ( $data['widgets'] as $widget ) {
 				if ( ! is_array( $widget ) ) {
-					continue;
+					if ( $in_transaction ) {
+						$wpdb->query( 'ROLLBACK' );
+					}
+					return new WP_Error( 'import_widget_invalid', __( 'Invalid widget record found in import file.', 'dashboard-widget-manager' ) );
+				}
+
+				$sanitized_widget = array();
+				if ( isset( $widget['name'] ) ) {
+					$sanitized_widget['name'] = DWM_Sanitizer::sanitize_widget_name( $widget['name'] );
+				}
+				if ( isset( $widget['description'] ) ) {
+					$sanitized_widget['description'] = DWM_Sanitizer::sanitize_widget_description( $widget['description'] );
+				}
+				if ( isset( $widget['sql_query'] ) ) {
+					$sanitized_widget['sql_query'] = DWM_Sanitizer::sanitize_sql_query( $widget['sql_query'] );
+				}
+				if ( isset( $widget['template'] ) ) {
+					$sanitized_widget['template'] = (string) $widget['template'];
+				}
+				if ( isset( $widget['styles'] ) ) {
+					$sanitized_widget['styles'] = DWM_Sanitizer::sanitize_styles( $widget['styles'] );
+				}
+				if ( isset( $widget['scripts'] ) ) {
+					$scripts                    = str_replace( array( '<?php', '<?', '?>' ), '', (string) $widget['scripts'] );
+					$sanitized_widget['scripts'] = trim( $scripts );
+				}
+				if ( isset( $widget['no_results_template'] ) ) {
+					$sanitized_widget['no_results_template'] = (string) $widget['no_results_template'];
+				}
+				if ( isset( $widget['status'] ) ) {
+					$sanitized_widget['status'] = DWM_Sanitizer::sanitize_status( $widget['status'] );
+				}
+				foreach ( array( 'enabled', 'widget_order', 'cache_duration', 'enable_caching', 'auto_refresh', 'max_execution_time', 'enable_query_logging', 'is_demo' ) as $int_key ) {
+					if ( isset( $widget[ $int_key ] ) ) {
+						$sanitized_widget[ $int_key ] = (int) $widget[ $int_key ];
+					}
+				}
+				if ( array_key_exists( 'chart_type', $widget ) ) {
+					$sanitized_widget['chart_type'] = sanitize_text_field( (string) $widget['chart_type'] );
+				}
+				if ( array_key_exists( 'chart_config', $widget ) ) {
+					$sanitized_widget['chart_config'] = $widget['chart_config'];
+				}
+				if ( array_key_exists( 'builder_config', $widget ) ) {
+					$sanitized_widget['builder_config'] = $widget['builder_config'];
+				}
+				if ( array_key_exists( 'output_config', $widget ) ) {
+					$sanitized_widget['output_config'] = DWM_Sanitizer::sanitize_output_config( (string) $widget['output_config'] );
+				}
+				if ( isset( $widget['first_published_at'] ) ) {
+					$sanitized_widget['first_published_at'] = sanitize_text_field( (string) $widget['first_published_at'] );
+				}
+				$import_uuid = $this->normalize_widget_uuid( $widget['uuid'] ?? '' );
+				if ( '' !== $import_uuid ) {
+					$sanitized_widget['uuid'] = $import_uuid;
+				}
+
+				$validation_errors = DWM_Validator::validate_widget_data( $sanitized_widget );
+				if ( ! empty( $validation_errors ) ) {
+					if ( $in_transaction ) {
+						$wpdb->query( 'ROLLBACK' );
+					}
+					return new WP_Error( 'import_widget_validation_failed', implode( ' ', $validation_errors ) );
 				}
 
 				// Strip ID for re-insert.
-				unset( $widget['id'], $widget['created_at'], $widget['updated_at'] );
+				unset( $sanitized_widget['id'], $sanitized_widget['created_at'], $sanitized_widget['updated_at'] );
 
 				if ( $merge ) {
-					// Check for existing widget with same name.
-					$existing_widget = $this->get_widget_by_name( $widget['name'] ?? '' );
-					if ( $existing_widget ) {
-						$this->update_widget( (int) $existing_widget['id'], $widget );
-						continue;
+					if ( '' !== $import_uuid ) {
+						$existing_widget = $this->get_widget_by_uuid( $import_uuid );
+						if ( $existing_widget ) {
+							if ( ! $this->update_widget( (int) $existing_widget['id'], $sanitized_widget ) ) {
+								if ( $in_transaction ) {
+									$wpdb->query( 'ROLLBACK' );
+								}
+								return new WP_Error( 'import_widget_update_failed', __( 'Failed to update an existing widget during import.', 'dashboard-widget-manager' ) );
+							}
+							continue;
+						}
+					} else {
+						$name_matches = $this->get_widgets_by_name( $sanitized_widget['name'] ?? '' );
+						if ( count( $name_matches ) > 1 ) {
+							if ( $in_transaction ) {
+								$wpdb->query( 'ROLLBACK' );
+							}
+							return new WP_Error( 'import_widget_match_ambiguous', __( 'Import conflict: multiple existing widgets share the same name and no UUID was provided.', 'dashboard-widget-manager' ) );
+						}
+						if ( 1 === count( $name_matches ) ) {
+							if ( ! $this->update_widget( (int) $name_matches[0]['id'], $sanitized_widget ) ) {
+								if ( $in_transaction ) {
+									$wpdb->query( 'ROLLBACK' );
+								}
+								return new WP_Error( 'import_widget_update_failed', __( 'Failed to update an existing widget during import.', 'dashboard-widget-manager' ) );
+							}
+							continue;
+						}
 					}
 				}
 
-				$result  = $this->create_widget( $widget );
-				$success = $success && ( false !== $result );
+				$result = $this->create_widget( $sanitized_widget );
+				if ( false === $result ) {
+					if ( $in_transaction ) {
+						$wpdb->query( 'ROLLBACK' );
+					}
+					return new WP_Error( 'import_widget_create_failed', __( 'Failed to create a widget during import.', 'dashboard-widget-manager' ) );
+				}
 			}
 		}
 
-		return $success;
+		// Import notifications.
+		if ( isset( $data['notifications'] ) && is_array( $data['notifications'] ) ) {
+			$notifications_obj = DWM_Notifications::get_instance();
+
+			if ( ! $merge ) {
+				// Replace mode: wipe the current user's notifications first.
+				$notifications_obj->delete_all_notifications();
+			}
+
+			foreach ( $data['notifications'] as $notif ) {
+				if ( ! is_array( $notif ) || empty( $notif['type'] ) ) {
+					continue;
+				}
+
+				$actions = [];
+				if ( ! empty( $notif['actions'] ) && is_array( $notif['actions'] ) ) {
+					foreach ( $notif['actions'] as $action ) {
+						if ( ! empty( $action['label'] ) && ! empty( $action['url'] ) ) {
+							$actions[] = [
+								'label' => sanitize_text_field( $action['label'] ),
+								'url'   => sanitize_text_field( $action['url'] ),
+							];
+						}
+					}
+				}
+
+				$notifications_obj->add_notification(
+					sanitize_text_field( $notif['type'] ),
+					sanitize_text_field( $notif['title'] ?? '' ),
+					sanitize_text_field( $notif['message'] ?? '' ),
+					sanitize_text_field( $notif['icon'] ?? 'info' ),
+					$actions
+				);
+			}
+		}
+
+		if ( $in_transaction ) {
+			$wpdb->query( 'COMMIT' );
+		}
+
+		return true;
 	}
 
 	/**
@@ -676,6 +995,23 @@ class DWM_Data {
 		$result = $wpdb->delete( $table, array( 'is_demo' => 1 ), array( '%d' ) );
 
 		return $result !== false ? (int) $result : 0;
+	}
+
+	/**
+	 * Truncate all widgets and query cache, resetting AUTO_INCREMENT to 1.
+	 *
+	 * @return bool True on success, false on failure.
+	 */
+	public function truncate_widgets() {
+		global $wpdb;
+
+		$widgets_table = $wpdb->prefix . self::TABLE_WIDGETS;
+		$cache_table   = $wpdb->prefix . self::TABLE_CACHE;
+
+		$result_widgets = $wpdb->query( "TRUNCATE TABLE {$widgets_table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$result_cache   = $wpdb->query( "TRUNCATE TABLE {$cache_table}" );   // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return $result_widgets !== false && $result_cache !== false;
 	}
 
 	/**

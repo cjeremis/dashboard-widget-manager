@@ -16,6 +16,57 @@ if ( ! defined( 'ABSPATH' ) ) {
 class DWM_Notifications_AJAX {
 
 	use DWM_Singleton;
+	use DWM_AJAX_Handler;
+
+	/**
+	 * Check whether live support notification sync is enabled.
+	 *
+	 * @return bool
+	 */
+	private function is_live_sync_enabled(): bool {
+		$settings = DWM_Data::get_instance()->get_settings();
+
+		return ! empty( $settings['support_data_sharing_opt_in'] );
+	}
+
+	/**
+	 * Add one local release/update notification per version.
+	 *
+	 * @param int $user_id User ID.
+	 * @return void
+	 */
+	private function maybe_add_version_notification( int $user_id ): void {
+		$meta_key     = 'dwm_last_seen_plugin_version';
+		$seen_version = (string) get_user_meta( $user_id, $meta_key, true );
+
+		if ( $seen_version === DWM_VERSION ) {
+			return;
+		}
+
+		$notifications = DWM_Notifications::get_instance();
+		$type          = 'plugin_update_' . sanitize_key( str_replace( '.', '_', DWM_VERSION ) );
+		$privacy_url   = get_permalink( (int) get_option( 'tda_shared_privacy_page_id' ) );
+		$terms_url     = get_permalink( (int) get_option( 'tda_shared_terms_page_id' ) );
+
+		$actions = [];
+		if ( $privacy_url ) {
+			$actions[] = [ 'label' => __( 'Privacy Policy', 'dashboard-widget-manager' ), 'url' => $privacy_url ];
+		}
+		if ( $terms_url ) {
+			$actions[] = [ 'label' => __( 'Terms', 'dashboard-widget-manager' ), 'url' => $terms_url ];
+		}
+
+		$notifications->add_notification(
+			$type,
+			sprintf( __( 'Dashboard Widget Manager Updated to %s', 'dashboard-widget-manager' ), DWM_VERSION ),
+			__( 'New release notes and policy disclosures are available in your plugin settings and legal pages.', 'dashboard-widget-manager' ),
+			'update',
+			$actions,
+			$user_id
+		);
+
+		update_user_meta( $user_id, $meta_key, DWM_VERSION );
+	}
 
 	/**
 	 * Get user notifications
@@ -23,64 +74,23 @@ class DWM_Notifications_AJAX {
 	 * @return void
 	 */
 	public function ajax_get_notifications(): void {
-		if ( ! current_user_can( DWM_Admin_Menu::REQUIRED_CAP ) ) {
-			wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+		if ( ! $this->verify_ajax_request( 'nonce', 'dwm_admin_nonce', DWM_Admin_Menu::REQUIRED_CAP ) ) {
+			return;
 		}
 
-		if ( ! check_ajax_referer( 'dwm_admin_nonce', 'nonce', false ) ) {
-			wp_send_json_error( [ 'message' => 'Invalid nonce' ], 403 );
-		}
+		$user_id = get_current_user_id();
+		$this->maybe_add_version_notification( $user_id );
 
-		// Sync remote support replies into local notifications before returning
-		if ( class_exists( 'DWM_Support_AJAX' ) ) {
+		// Sync remote support replies into local notifications before returning.
+		if ( $this->is_live_sync_enabled() && class_exists( 'DWM_Support_AJAX' ) ) {
 			DWM_Support_AJAX::get_instance()->sync_notifications_for_user( get_current_user_id() );
 		}
 
 		$notifications_db = DWM_Notifications::get_instance();
 		$notifications    = $notifications_db->get_user_notifications();
 
-		// Check if Pro is fully enabled (installed, active, AND licensed)
-		$is_pro_enabled = class_exists( 'DWM_Pro_Feature_Gate' ) && DWM_Pro_Feature_Gate::is_pro_enabled();
-
-		// Check if we should show the hardcoded license CTA
-		$show_license_cta = false;
-		if ( ! $is_pro_enabled ) {
-			$pro_plugin_file  = 'dashboard-widget-manager-pro/dashboard-widget-manager-pro.php';
-			$pro_plugin_path  = WP_PLUGIN_DIR . '/' . $pro_plugin_file;
-			$is_pro_installed = file_exists( $pro_plugin_path );
-
-			if ( ! function_exists( 'is_plugin_active' ) ) {
-				include_once ABSPATH . 'wp-admin/includes/plugin.php';
-			}
-			$is_pro_active = $is_pro_installed && is_plugin_active( $pro_plugin_file );
-
-			// Show license CTA if Pro is active but not fully enabled (missing license)
-			$show_license_cta = $is_pro_active;
-		}
-
 		// Format notifications for JSON response
 		$formatted_notifications = [];
-
-		// Add hardcoded license CTA first if needed
-		if ( $show_license_cta ) {
-			$formatted_notifications[] = [
-				'id'        => 'license-cta',
-				'type'      => 'pro_api_key_missing',
-				'title'     => __( 'Pro Plugin Installed', 'dashboard-widget-manager' ),
-				'message'   => __( 'Enter your Dashboard Widget Manager Pro license key to unlock all premium features.', 'dashboard-widget-manager' ),
-				'icon'      => 'star-filled',
-				'actions'   => [
-					[
-						'label'      => __( 'Add License Key', 'dashboard-widget-manager' ),
-						'url'        => admin_url( 'admin.php?page=dwm-settings#dwm-pro-license-key' ),
-						'class'      => 'dwm-add-api-key-button',
-						'scrollTo'   => 'dwm-pro-license-key',
-						'focusField' => 'dwm_pro_license_key',
-					],
-				],
-				'deletable' => false,
-			];
-		}
 
 		foreach ( $notifications as $notification ) {
 			// Skip pro_api_key_missing from DB since it's now hardcoded
@@ -99,18 +109,10 @@ class DWM_Notifications_AJAX {
 			];
 		}
 
-		// Count only database notifications (don't count the license CTA)
-		$count = count( $notifications );
-		foreach ( $notifications as $notification ) {
-			if ( 'pro_api_key_missing' === $notification['type'] ) {
-				$count--;
-			}
-		}
-
 		wp_send_json_success(
 			[
 				'notifications' => $formatted_notifications,
-				'count'         => $count,
+				'count'         => count( $formatted_notifications ),
 			]
 		);
 	}
@@ -121,12 +123,8 @@ class DWM_Notifications_AJAX {
 	 * @return void
 	 */
 	public function ajax_delete_notification(): void {
-		if ( ! current_user_can( DWM_Admin_Menu::REQUIRED_CAP ) ) {
-			wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
-		}
-
-		if ( ! check_ajax_referer( 'dwm_admin_nonce', 'nonce', false ) ) {
-			wp_send_json_error( [ 'message' => 'Invalid nonce' ], 403 );
+		if ( ! $this->verify_ajax_request( 'nonce', 'dwm_admin_nonce', DWM_Admin_Menu::REQUIRED_CAP ) ) {
+			return;
 		}
 
 		// phpcs:ignore WordPress.Security.ValidatedInput.InputNotSanitized
@@ -173,15 +171,14 @@ class DWM_Notifications_AJAX {
 	 * @return void
 	 */
 	public function ajax_get_notification_count(): void {
-		if ( ! current_user_can( DWM_Admin_Menu::REQUIRED_CAP ) ) {
-			wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
+		if ( ! $this->verify_ajax_request( 'nonce', 'dwm_admin_nonce', DWM_Admin_Menu::REQUIRED_CAP ) ) {
+			return;
 		}
 
-		if ( ! check_ajax_referer( 'dwm_admin_nonce', 'nonce', false ) ) {
-			wp_send_json_error( [ 'message' => 'Invalid nonce' ], 403 );
-		}
+		$user_id = get_current_user_id();
+		$this->maybe_add_version_notification( $user_id );
 
-		if ( class_exists( 'DWM_Support_AJAX' ) ) {
+		if ( $this->is_live_sync_enabled() && class_exists( 'DWM_Support_AJAX' ) ) {
 			DWM_Support_AJAX::get_instance()->sync_notifications_for_user( get_current_user_id() );
 		}
 
@@ -206,12 +203,8 @@ class DWM_Notifications_AJAX {
 	 * @return void
 	 */
 	public function ajax_mark_read(): void {
-		if ( ! current_user_can( DWM_Admin_Menu::REQUIRED_CAP ) ) {
-			wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
-		}
-
-		if ( ! check_ajax_referer( 'dwm_admin_nonce', 'nonce', false ) ) {
-			wp_send_json_error( [ 'message' => 'Invalid nonce' ], 403 );
+		if ( ! $this->verify_ajax_request( 'nonce', 'dwm_admin_nonce', DWM_Admin_Menu::REQUIRED_CAP ) ) {
+			return;
 		}
 
 		// phpcs:ignore WordPress.Security.ValidatedInput.InputNotSanitized
@@ -255,12 +248,8 @@ class DWM_Notifications_AJAX {
 	 * @return void
 	 */
 	public function ajax_mark_unread(): void {
-		if ( ! current_user_can( DWM_Admin_Menu::REQUIRED_CAP ) ) {
-			wp_send_json_error( [ 'message' => 'Unauthorized' ], 403 );
-		}
-
-		if ( ! check_ajax_referer( 'dwm_admin_nonce', 'nonce', false ) ) {
-			wp_send_json_error( [ 'message' => 'Invalid nonce' ], 403 );
+		if ( ! $this->verify_ajax_request( 'nonce', 'dwm_admin_nonce', DWM_Admin_Menu::REQUIRED_CAP ) ) {
+			return;
 		}
 
 		// phpcs:ignore WordPress.Security.ValidatedInput.InputNotSanitized

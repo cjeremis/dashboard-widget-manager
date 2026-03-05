@@ -20,6 +20,12 @@ $version = defined( 'DWM_VERSION' ) ? DWM_VERSION : '';
 <!-- Pro Upsell Footer -->
 <?php include __DIR__ . '/pro-upsell-footer.php'; ?>
 
+<!-- Pro Integrations Marquee -->
+<?php include __DIR__ . '/integrations-marquee.php'; ?>
+
+<!-- Plugin Promo Section -->
+<?php include __DIR__ . '/plugin-promo.php'; ?>
+
 <div class="dwm-footer">
 	<span>
 		<?php
@@ -33,8 +39,3 @@ $version = defined( 'DWM_VERSION' ) ? DWM_VERSION : '';
 		?>
 	</span>
 </div>
-
-<!-- Global Modals -->
-<?php include DWM_PLUGIN_DIR . 'templates/admin/modals/features-modal.php'; ?>
-<?php include DWM_PLUGIN_DIR . 'templates/admin/modals/docs-modal.php'; ?>
-<?php include __DIR__ . '/support-ticket-form.php'; ?>

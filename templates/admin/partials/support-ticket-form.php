@@ -12,6 +12,11 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+$privacy_page_id = (int) get_option( 'tda_shared_privacy_page_id' );
+$terms_page_id   = (int) get_option( 'tda_shared_terms_page_id' );
+$privacy_url     = $privacy_page_id ? get_permalink( $privacy_page_id ) : 'https://topdevamerica.com/privacy-policy';
+$terms_url       = $terms_page_id ? get_permalink( $terms_page_id ) : 'https://topdevamerica.com/terms';
 ?>
 
 <div id="dwm-new-ticket-modal" class="dwm-modal dwm-support-ticket-modal">
@@ -61,19 +66,38 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<textarea
 						id="dwm-ticket-description"
 						name="description"
-						rows="8"
+						rows="5"
 						required
 						minlength="10"
 						placeholder="<?php esc_attr_e( 'Provide detailed information about your issue, including steps to reproduce if applicable...', 'dashboard-widget-manager' ); ?>"
 					></textarea>
 				</div>
 
-				<div class="dwm-info-box dwm-info-box--info">
-					<span class="dashicons dashicons-info"></span>
-					<div>
-						<strong><?php esc_html_e( 'System Information Auto-Collected', 'dashboard-widget-manager' ); ?></strong>
-						<p><?php esc_html_e( 'Your WordPress version, theme, active plugins, and other system details will be automatically included to help us diagnose your issue faster.', 'dashboard-widget-manager' ); ?></p>
-					</div>
+				<div class="dwm-form-group">
+					<label class="dwm-checkbox-label" for="dwm-ticket-data-consent" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+						<input
+							type="checkbox"
+							id="dwm-ticket-data-consent"
+							name="support_data_consent"
+							value="1"
+							required
+							style="margin-top:3px;flex-shrink:0;"
+						/>
+						<span>
+							<?php
+							esc_html_e(
+								'I consent to transmitting diagnostic information — site URL, active plugins, WordPress version, PHP version, active theme, IP address, and browser user agent — to TopDevAmerica support to help resolve my ticket.',
+								'dashboard-widget-manager'
+							);
+							?>
+							<span class="dwm-required">*</span>
+						</span>
+					</label>
+					<p class="description" style="margin-top:4px;margin-left:24px;">
+						<a href="<?php echo esc_url( $privacy_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Privacy Policy', 'dashboard-widget-manager' ); ?></a>
+						|
+						<a href="<?php echo esc_url( $terms_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Terms of Service', 'dashboard-widget-manager' ); ?></a>
+					</p>
 				</div>
 
 				<div id="dwm-ticket-form-message" class="dwm-message" style="display: none;"></div>

@@ -119,12 +119,15 @@ class DWM_License_Manager {
 		$timestamp = (string) time();
 		$signature = hash_hmac( 'sha256', $timestamp . '.' . $body, $api_secret );
 
+		// sslverify is always true in production. Define DWM_DEV_DISABLE_SSLVERIFY=true only in local dev environments.
+		$sslverify = defined( 'DWM_DEV_DISABLE_SSLVERIFY' ) && DWM_DEV_DISABLE_SSLVERIFY ? false : true;
+
 		$response = wp_remote_post(
 			$api_url,
 			[
 				'timeout'   => 10,
 				'blocking'  => true,
-				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+				'sslverify' => $sslverify,
 				'headers'   => [
 					'X-WP-Nonce'      => $api_nonce,
 					'X-DWM-Timestamp' => $timestamp,

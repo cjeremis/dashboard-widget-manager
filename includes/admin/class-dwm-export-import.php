@@ -130,11 +130,8 @@ class DWM_Export_Import {
 		$success = true;
 
 		if ( ! empty( $reset['widgets'] ) ) {
-			$widgets = $data->get_widgets();
-			foreach ( $widgets as $widget ) {
-				$result  = $data->delete_widget( (int) $widget['id'] );
-				$success = $success && $result;
-			}
+			$result  = $data->truncate_widgets();
+			$success = $success && $result;
 		}
 
 		if ( ! empty( $reset['settings'] ) ) {
@@ -143,11 +140,34 @@ class DWM_Export_Import {
 			$success          = $success && $result;
 		}
 
+		if ( ! empty( $reset['notifications'] ) ) {
+			DWM_Notifications::get_instance()->delete_all_notifications();
+		}
+
 		if ( $success ) {
 			$this->send_success( __( 'Data reset successfully.', 'dashboard-widget-manager' ) );
 		} else {
 			$this->send_error( __( 'Failed to reset data.', 'dashboard-widget-manager' ), 500 );
 		}
+	}
+
+	/**
+	 * Clear all DWM caches via AJAX.
+	 */
+	public function ajax_clear_caches() {
+		if ( ! $this->verify_ajax_request() ) {
+			return;
+		}
+
+		$data    = DWM_Data::get_instance();
+		$success = $data->clear_all_caches();
+
+		if ( $success ) {
+			$this->send_success( __( 'All Dashboard Widget Manager caches have been cleared.', 'dashboard-widget-manager' ) );
+			return;
+		}
+
+		$this->send_error( __( 'Failed to clear one or more caches.', 'dashboard-widget-manager' ), 500 );
 	}
 
 	/**

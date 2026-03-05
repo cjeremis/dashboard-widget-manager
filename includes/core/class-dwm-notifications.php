@@ -259,6 +259,35 @@ class DWM_Notifications {
 	}
 
 	/**
+	 * Hard-delete all notifications for a user (used by reset and replace-import)
+	 *
+	 * @param int $user_id Optional user ID (defaults to current user)
+	 *
+	 * @return bool True on success
+	 */
+	public function delete_all_notifications( int $user_id = 0 ): bool {
+		if ( ! $this->table_exists() ) {
+			return false;
+		}
+
+		if ( ! $user_id ) {
+			$user_id = get_current_user_id();
+		}
+
+		if ( ! $user_id ) {
+			return false;
+		}
+
+		global $wpdb;
+		$table = self::get_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$result = $wpdb->delete( $table, [ 'user_id' => $user_id ], [ '%d' ] );
+
+		return $result !== false;
+	}
+
+	/**
 	 * Delete all demo notifications for a user
 	 *
 	 * @param int $user_id Optional user ID (defaults to current user)

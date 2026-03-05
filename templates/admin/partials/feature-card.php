@@ -36,8 +36,15 @@ if ( $badge ) {
 } elseif ( $is_implemented ) {
 	$card_classes[] = 'is-free';
 }
+$details      = $details ?? '';
+$search_parts = array_filter( [ $title, $description, implode( ' ', $features ), $details ] );
+$search_text  = mb_strtolower( implode( ' ', $search_parts ) );
 ?>
-<div class="<?php echo esc_attr( implode( ' ', $card_classes ) ); ?>">
+<div class="<?php echo esc_attr( implode( ' ', $card_classes ) ); ?>"
+	data-feature-plan="<?php echo esc_attr( $is_pro ? 'pro' : 'free' ); ?>"
+	data-feature-implemented="<?php echo $is_implemented ? '1' : '0'; ?>"
+	data-feature-title="<?php echo esc_attr( mb_strtolower( $title ) ); ?>"
+	data-feature-search="<?php echo esc_attr( $search_text ); ?>">
 	<div class="dwm-feature-header">
 		<div class="dwm-feature-icon"><?php echo esc_html( $icon ); ?></div>
 		<h4><?php echo esc_html( $title ); ?></h4>
@@ -50,13 +57,6 @@ if ( $badge ) {
 			<?php endforeach; ?>
 		</ul>
 	<?php endif; ?>
-	<?php if ( ! empty( $docs_page ) ) : ?>
-		<div class="dwm-feature-learn-more">
-			<button type="button" class="dwm-learn-more-button" data-docs-page="<?php echo esc_attr( $docs_page ); ?>">
-				<?php esc_html_e( 'Learn More', 'dashboard-widget-manager' ); ?>
-			</button>
-		</div>
-	<?php endif; ?>
 	<div class="dwm-feature-footer">
 		<?php if ( $is_pro && $badge ) : ?>
 			<span class="dwm-pro-badge"><?php echo esc_html( $feature_labels['badge_pro'] ); ?></span>
@@ -67,6 +67,11 @@ if ( $badge ) {
 			<span class="dwm-pro-badge"><?php echo esc_html( $feature_labels['badge_pro'] ); ?></span>
 		<?php elseif ( $is_implemented ) : ?>
 			<span class="dwm-free-badge"><?php echo esc_html( $feature_labels['badge_free'] ); ?></span>
+		<?php endif; ?>
+		<?php if ( ! empty( $docs_page ) ) : ?>
+			<button type="button" class="dwm-learn-more-button" data-docs-page="<?php echo esc_attr( $docs_page ); ?>">
+				<?php esc_html_e( 'Learn More', 'dashboard-widget-manager' ); ?>
+			</button>
 		<?php endif; ?>
 	</div>
 </div>

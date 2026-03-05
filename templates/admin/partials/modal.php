@@ -25,6 +25,7 @@ $body_html     = $modal['body_html'] ?? '';
 $footer_html   = $modal['footer_html'] ?? '';
 $size_class    = $modal['size_class'] ?? 'dwm-modal-md';
 $display_style = isset( $modal['display'] ) ? ' style="display: ' . esc_attr( $modal['display'] ) . ';"' : '';
+$close_attrs   = $modal['close_attrs'] ?? '';
 ?>
 <div id="<?php echo esc_attr( $modal_id ); ?>" class="dwm-modal <?php echo esc_attr( $size_class ); ?>"<?php echo $display_style; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 	<div class="dwm-modal-overlay"></div>

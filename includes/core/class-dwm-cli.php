@@ -23,7 +23,7 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 class DWM_CLI {
 
 	/**
-	 * Import demo widgets into the database.
+	 * Import demo data into the database.
 	 *
 	 * ## OPTIONS
 	 *
@@ -40,7 +40,7 @@ class DWM_CLI {
 	public function import_demo_data( $args, $assoc_args ) {
 		$force = \WP_CLI\Utils\get_flag_value( $assoc_args, 'force', false );
 
-		$demo_file = DWM_PLUGIN_DIR . 'data/demo-data.json';
+		$demo_file = DWM_PLUGIN_DIR . 'includes/admin/data/demo-data.json';
 
 		if ( ! file_exists( $demo_file ) ) {
 			\WP_CLI::error( sprintf( 'Demo data file not found at %s', $demo_file ) );
@@ -105,7 +105,7 @@ class DWM_CLI {
 	}
 
 	/**
-	 * Delete all demo widgets from the database.
+	 * Delete all demo data from the database.
 	 *
 	 * ## EXAMPLES
 	 *

@@ -78,15 +78,15 @@ class DWM_Settings {
 			return;
 		}
 
-		// Check if any active widgets are now using tables outside the new whitelist.
-		$allowed_tables = $data->get_allowed_tables();
-		$affected       = array();
+		// Check if any active widgets are now using excluded tables.
+		$excluded_tables = $data->get_excluded_tables();
+		$affected        = array();
 
-		if ( ! empty( $allowed_tables ) ) {
+		if ( ! empty( $excluded_tables ) ) {
 			$active_widgets = $data->get_widgets( true );
 			foreach ( $active_widgets as $widget ) {
 				if ( ! empty( $widget['sql_query'] ) ) {
-					$table_errors = DWM_Validator::validate_query_tables( $widget['sql_query'], $allowed_tables );
+					$table_errors = DWM_Validator::validate_query_tables( $widget['sql_query'], $excluded_tables );
 					if ( ! empty( $table_errors ) ) {
 						$affected[] = $widget['name'];
 					}
@@ -99,8 +99,8 @@ class DWM_Settings {
 			$response['warning']          = sprintf(
 				/* translators: 1: number of widgets, 2: comma-separated widget names */
 				_n(
-					'%1$d active widget is now using a table outside the whitelist and will fail to execute: %2$s',
-					'%1$d active widgets are now using tables outside the whitelist and will fail to execute: %2$s',
+					'%1$d active widget is now using an excluded table and will fail to execute: %2$s',
+					'%1$d active widgets are now using excluded tables and will fail to execute: %2$s',
 					count( $affected ),
 					'dashboard-widget-manager'
 				),
@@ -144,7 +144,8 @@ class DWM_Settings {
 	 */
 	public function get_default_settings() {
 		return array(
-			'allowed_tables' => '',
+			'excluded_tables'             => '',
+			'support_data_sharing_opt_in' => 0,
 		);
 	}
 }

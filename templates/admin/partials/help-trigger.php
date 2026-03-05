@@ -34,7 +34,7 @@ $classes    = trim( $base_class . ' ' . $extra_class );
 		<?php endif; ?>
 	</button>
 <?php else : ?>
-	<a href="<?php echo esc_attr( $modal_target ); ?>"
+	<a href="#"
 		class="<?php echo esc_attr( $classes ); ?>"
 		data-open-modal="<?php echo esc_attr( $modal_target ); ?>"
 		<?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>

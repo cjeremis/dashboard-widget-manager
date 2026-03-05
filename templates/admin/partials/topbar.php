@@ -36,7 +36,13 @@ const DWM_TOPBAR_MENU_CONFIG = [
 		'slug'    => 'dwm-settings',
 		'label'   => 'Settings',
 		'classes' => [ 'dwm-topbar-link' ],
-	]
+	],
+	[
+		'type'    => 'link',
+		'slug'    => 'dwm-tools',
+		'label'   => 'Tools',
+		'classes' => [ 'dwm-topbar-link' ],
+	],
 ];
 
 $nav_items = [];

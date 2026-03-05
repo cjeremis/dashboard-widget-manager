@@ -48,10 +48,10 @@ class DWM_Query_Executor {
 		// Parse query variables.
 		$query = $this->parse_query_variables( $query );
 
-		// Check table whitelist against parsed query (real table names after variable substitution).
-		$allowed_tables = $data->get_allowed_tables();
-		if ( ! empty( $allowed_tables ) ) {
-			$table_errors = DWM_Validator::validate_query_tables( $query, $allowed_tables );
+		// Check table blacklist against parsed query (real table names after variable substitution).
+		$excluded_tables = $data->get_excluded_tables();
+		if ( ! empty( $excluded_tables ) ) {
+			$table_errors = DWM_Validator::validate_query_tables( $query, $excluded_tables );
 			if ( ! empty( $table_errors ) ) {
 				return new WP_Error( 'table_not_allowed', implode( ' ', $table_errors ) );
 			}
@@ -68,6 +68,9 @@ class DWM_Query_Executor {
 			$cached    = $data->get_cached_query_result( $cache_key );
 
 			if ( $cached !== null ) {
+				if ( $enable_logging ) {
+					$this->log_query( $query, 0.0, is_array( $cached ) ? count( $cached ) : 0, true );
+				}
 				return $cached;
 			}
 		}
@@ -158,13 +161,10 @@ class DWM_Query_Executor {
 
 		// Check for errors.
 		if ( $wpdb->last_error ) {
+			error_log( '[DWM Query] Database error: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			return new WP_Error(
 				'query_error',
-				sprintf(
-					/* translators: %s: Database error message */
-					__( 'Database error: %s', 'dashboard-widget-manager' ),
-					$wpdb->last_error
-				)
+				__( 'Database error occurred.', 'dashboard-widget-manager' )
 			);
 		}
 
@@ -208,10 +208,28 @@ class DWM_Query_Executor {
 
 				$output = '';
 				// Header row.
-				$output .= implode( ',', array_keys( $results[0] ) ) . "\n";
+				$output .= implode(
+					',',
+					array_map(
+						static function( $value ) {
+							$value = str_replace( '"', '""', (string) $value );
+							return '"' . $value . '"';
+						},
+						array_keys( $results[0] )
+					)
+				) . "\n";
 				// Data rows.
 				foreach ( $results as $row ) {
-					$output .= implode( ',', array_map( 'esc_csv', $row ) ) . "\n";
+					$output .= implode(
+						',',
+						array_map(
+							static function( $value ) {
+								$value = str_replace( '"', '""', (string) $value );
+								return '"' . $value . '"';
+							},
+							$row
+						)
+					) . "\n";
 				}
 				return $output;
 
@@ -237,15 +255,17 @@ class DWM_Query_Executor {
 	 * @param string $query SQL query.
 	 * @param float  $execution_time Execution time in seconds.
 	 * @param int    $row_count Number of rows returned.
+	 * @param bool   $from_cache Whether results were served from cache.
 	 */
-	private function log_query( $query, $execution_time, $row_count ) {
+	private function log_query( $query, $execution_time, $row_count, $from_cache = false ) {
 		// Log to WordPress debug log if WP_DEBUG_LOG is enabled.
 		if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
 			error_log(
 				sprintf(
-					'[DWM Query] Time: %.4fs | Rows: %d | Query: %s',
+					'[DWM Query] Time: %.4fs | Rows: %d | Cache: %s | Query: %s',
 					$execution_time,
 					$row_count,
+					$from_cache ? 'hit' : 'miss',
 					$query
 				)
 			);
@@ -258,9 +278,10 @@ class DWM_Query_Executor {
 	 * Used for query validation in admin interface.
 	 *
 	 * @param string $query SQL query to test.
+	 * @param int    $max_time Maximum execution time in seconds.
 	 * @return array|WP_Error Query results or error.
 	 */
-	public function test_query( $query ) {
+	public function test_query( $query, $max_time = 30 ) {
 		// Validate query first.
 		$validation_errors = $this->validate_query( $query );
 		if ( ! empty( $validation_errors ) ) {
@@ -270,18 +291,18 @@ class DWM_Query_Executor {
 		// Parse variables.
 		$query = $this->parse_query_variables( $query );
 
-		// Check table whitelist against parsed query.
-		$data           = DWM_Data::get_instance();
-		$allowed_tables = $data->get_allowed_tables();
-		if ( ! empty( $allowed_tables ) ) {
-			$table_errors = DWM_Validator::validate_query_tables( $query, $allowed_tables );
+		// Check table blacklist against parsed query.
+		$data            = DWM_Data::get_instance();
+		$excluded_tables = $data->get_excluded_tables();
+		if ( ! empty( $excluded_tables ) ) {
+			$table_errors = DWM_Validator::validate_query_tables( $query, $excluded_tables );
 			if ( ! empty( $table_errors ) ) {
 				return new WP_Error( 'table_not_allowed', implode( ' ', $table_errors ) );
 			}
 		}
 
-		// Execute query.
-		$results = $this->execute_sql( $query );
+		// Execute query using the same execution-time guard used by live widgets.
+		$results = $this->execute_sql( $query, max( 1, (int) $max_time ), false );
 
 		return $results;
 	}

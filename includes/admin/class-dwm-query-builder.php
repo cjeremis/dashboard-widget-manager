@@ -25,8 +25,8 @@ class DWM_Query_Builder {
 	/**
 	 * Return available tables for the builder dropdown.
 	 *
-	 * Respects the allowed_tables whitelist if configured.
-	 * Otherwise returns all standard WordPress core tables.
+	 * Excludes any tables in the excluded_tables blacklist.
+	 * Returns all WordPress-prefixed tables when nothing is excluded.
 	 */
 	public function ajax_get_tables() {
 		if ( ! $this->verify_ajax_request() ) {
@@ -35,26 +35,18 @@ class DWM_Query_Builder {
 
 		global $wpdb;
 
-		$data           = DWM_Data::get_instance();
-		$allowed_tables = $data->get_allowed_tables();
+		$data            = DWM_Data::get_instance();
+		$excluded_tables = $data->get_excluded_tables();
+		$all             = $wpdb->get_col( 'SHOW TABLES' );
+		$prefix          = $wpdb->prefix;
+		$tables          = array_filter( $all, fn( $t ) => str_starts_with( $t, $prefix ) );
+		$tables          = array_values( $tables );
 
-		if ( ! empty( $allowed_tables ) ) {
-			// Return only whitelisted tables that actually exist.
-			$tables = array();
-			foreach ( $allowed_tables as $table ) {
-				$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-				if ( $exists ) {
-					$tables[] = $table;
-				}
-			}
-		} else {
-			// Return all tables with WP prefix.
-			$all    = $wpdb->get_col( 'SHOW TABLES' );
-			$prefix = $wpdb->prefix;
-			$tables = array_filter( $all, fn( $t ) => str_starts_with( $t, $prefix ) );
-			$tables = array_values( $tables );
-			sort( $tables );
+		if ( ! empty( $excluded_tables ) ) {
+			$tables = array_values( array_filter( $tables, fn( $t ) => ! in_array( $t, $excluded_tables, true ) ) );
 		}
+
+		sort( $tables );
 
 		$this->send_success(
 			__( 'Tables retrieved.', 'dashboard-widget-manager' ),
@@ -84,6 +76,14 @@ class DWM_Query_Builder {
 		// Security: only allow alphanumeric + underscore table names.
 		if ( ! preg_match( '/^[a-zA-Z0-9_]+$/', $table ) ) {
 			$this->send_error( __( 'Invalid table name.', 'dashboard-widget-manager' ), 400 );
+			return;
+		}
+
+		// Check table is not excluded by security settings.
+		$data            = DWM_Data::get_instance();
+		$excluded_tables = $data->get_excluded_tables();
+		if ( ! empty( $excluded_tables ) && in_array( $table, $excluded_tables, true ) ) {
+			$this->send_error( __( 'Table not found.', 'dashboard-widget-manager' ), 404 );
 			return;
 		}
 
@@ -147,6 +147,8 @@ class DWM_Query_Builder {
 			array(
 				'sql'      => $result['sql'],
 				'template' => $result['template'],
+				'css'      => $result['css'],
+				'scripts'  => $result['scripts'],
 			)
 		);
 	}
@@ -179,6 +181,9 @@ class DWM_Query_Builder {
 		if ( empty( $table ) || ! preg_match( '/^[a-zA-Z0-9_]+$/', $table ) ) {
 			return new WP_Error( 'invalid_table', __( 'A valid primary table is required.', 'dashboard-widget-manager' ) );
 		}
+		if ( ! $this->table_exists( $table ) ) {
+			return new WP_Error( 'missing_table', __( 'The selected primary table does not exist.', 'dashboard-widget-manager' ) );
+		}
 
 		$columns      = isset( $config['columns'] ) && is_array( $config['columns'] ) ? $config['columns'] : array();
 		$joins        = isset( $config['joins'] ) && is_array( $config['joins'] ) ? $config['joins'] : array();
@@ -201,27 +206,14 @@ class DWM_Query_Builder {
 		$limit        = ! $no_limit && isset( $config['limit'] ) ? max( 1, min( 1000, (int) $config['limit'] ) ) : 10;
 		$display_mode = isset( $config['display_mode'] ) ? sanitize_text_field( $config['display_mode'] ) : 'table';
 
-		// --- SELECT clause ---
-		$select_parts = array();
-		if ( empty( $columns ) ) {
-			$select_parts[] = '`' . $table . '`.*';
-		} else {
-			foreach ( $columns as $col ) {
-				$col = sanitize_text_field( $col );
-				if ( preg_match( '/^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+$/', $col ) ) {
-					// Already qualified: alias.column
-					$select_parts[] = $col;
-				} elseif ( preg_match( '/^[a-zA-Z0-9_]+$/', $col ) ) {
-					$select_parts[] = '`' . $table . '`.`' . $col . '`';
-				}
-			}
-		}
-
-		$sql = 'SELECT ' . implode( ', ', $select_parts );
-		$sql .= "\nFROM `" . $table . '`';
+		$schema_by_table = array(
+			$table => $this->get_table_columns( $table ),
+		);
+		$allowed_tables = array( $table );
 
 		// --- JOIN clauses ---
 		$valid_join_types = array( 'LEFT', 'RIGHT', 'INNER' );
+		$join_parts       = array();
 		foreach ( $joins as $join ) {
 			$join_type  = isset( $join['type'] ) && in_array( strtoupper( $join['type'] ), $valid_join_types, true )
 				? strtoupper( $join['type'] )
@@ -239,10 +231,64 @@ class DWM_Query_Builder {
 				! preg_match( '/^[a-zA-Z0-9_.]+$/', $local_col ) ||
 				! preg_match( '/^[a-zA-Z0-9_.]+$/', $foreign_col )
 			) {
-				continue;
+				return new WP_Error( 'invalid_join_clause', __( 'Invalid join table or column format.', 'dashboard-widget-manager' ) );
 			}
 
-			$sql .= "\n{$join_type} JOIN `{$join_table}` ON {$local_col} = {$foreign_col}";
+			if ( ! $this->table_exists( $join_table ) ) {
+				return new WP_Error(
+					'join_table_not_found',
+					sprintf(
+						/* translators: %s: table name */
+						__( 'JOIN table "%s" does not exist.', 'dashboard-widget-manager' ),
+						$join_table
+					)
+				);
+			}
+
+			if ( ! in_array( $join_table, $allowed_tables, true ) ) {
+				$allowed_tables[] = $join_table;
+			}
+			if ( ! isset( $schema_by_table[ $join_table ] ) ) {
+				$schema_by_table[ $join_table ] = $this->get_table_columns( $join_table );
+			}
+
+			$local_ref = $this->parse_column_reference( $local_col, $table, $allowed_tables, $schema_by_table, true );
+			if ( is_wp_error( $local_ref ) ) {
+				return $local_ref;
+			}
+			$foreign_ref = $this->parse_column_reference( $foreign_col, $join_table, $allowed_tables, $schema_by_table, true );
+			if ( is_wp_error( $foreign_ref ) ) {
+				return $foreign_ref;
+			}
+
+			$join_parts[] = "{$join_type} JOIN `{$join_table}` ON {$local_ref['qualified']} = {$foreign_ref['qualified']}";
+		}
+
+		// --- SELECT clause ---
+		$select_parts      = array();
+		$template_columns  = array();
+		if ( empty( $columns ) ) {
+			return new WP_Error( 'missing_columns', __( 'At least one column must be selected.', 'dashboard-widget-manager' ) );
+		}
+
+		foreach ( $columns as $col ) {
+			$column_ref = $this->parse_column_reference( $col, $table, $allowed_tables, $schema_by_table, false );
+			if ( is_wp_error( $column_ref ) ) {
+				return $column_ref;
+			}
+			$select_parts[] = $column_ref['qualified'];
+			$template_columns[] = $column_ref['table'] === $table
+				? $column_ref['column']
+				: $column_ref['table'] . '.' . $column_ref['column'];
+		}
+		if ( empty( $select_parts ) ) {
+			return new WP_Error( 'invalid_columns', __( 'No valid columns were selected.', 'dashboard-widget-manager' ) );
+		}
+
+		$sql = 'SELECT ' . implode( ', ', $select_parts );
+		$sql .= "\nFROM `" . $table . '`';
+		if ( ! empty( $join_parts ) ) {
+			$sql .= "\n" . implode( "\n", $join_parts );
 		}
 
 		// --- WHERE clause ---
@@ -253,21 +299,34 @@ class DWM_Query_Builder {
 			$op  = isset( $cond['operator'] ) ? strtoupper( sanitize_text_field( $cond['operator'] ) ) : '=';
 			$val = isset( $cond['value'] ) ? $cond['value'] : '';
 
-			if ( empty( $col ) || ! preg_match( '/^[a-zA-Z0-9_.`]+$/', $col ) ) {
-				continue;
+			if ( empty( $col ) || ! preg_match( '/^[a-zA-Z0-9_.]+$/', $col ) ) {
+				return new WP_Error( 'invalid_where_column', __( 'Invalid WHERE column name.', 'dashboard-widget-manager' ) );
 			}
 
 			if ( ! in_array( $op, $valid_operators, true ) ) {
 				continue;
 			}
 
+			$column_ref = $this->parse_column_reference( $col, $table, $allowed_tables, $schema_by_table, true );
+			if ( is_wp_error( $column_ref ) ) {
+				return $column_ref;
+			}
+			$qualified_col = $column_ref['qualified'];
+
 			if ( $op === 'IS NULL' || $op === 'IS NOT NULL' ) {
-				$where_parts[] = $col . ' ' . $op;
+				$where_parts[] = $qualified_col . ' ' . $op;
 			} elseif ( $op === 'IN' || $op === 'NOT IN' ) {
-				$vals = array_map( fn( $v ) => $wpdb->prepare( '%s', trim( $v ) ), explode( ',', $val ) );
-				$where_parts[] = $col . ' ' . $op . ' (' . implode( ', ', $vals ) . ')';
+				$raw_vals = array_filter(
+					array_map( 'trim', explode( ',', (string) $val ) ),
+					static fn( $v ) => '' !== $v
+				);
+				if ( empty( $raw_vals ) ) {
+					continue;
+				}
+				$vals          = array_map( static fn( $v ) => $wpdb->prepare( '%s', $v ), $raw_vals );
+				$where_parts[] = $qualified_col . ' ' . $op . ' (' . implode( ', ', $vals ) . ')';
 			} else {
-				$where_parts[] = $col . ' ' . $op . ' ' . $wpdb->prepare( '%s', $val );
+				$where_parts[] = $qualified_col . ' ' . $op . ' ' . $wpdb->prepare( '%s', $val );
 			}
 		}
 
@@ -281,9 +340,14 @@ class DWM_Query_Builder {
 			foreach ( $orders as $order ) {
 				$col = isset( $order['column'] ) ? sanitize_text_field( $order['column'] ) : '';
 				$dir = isset( $order['direction'] ) && strtoupper( $order['direction'] ) === 'ASC' ? 'ASC' : 'DESC';
-				if ( ! empty( $col ) && preg_match( '/^[a-zA-Z0-9_.`]+$/', $col ) ) {
-					$order_parts[] = "{$col} {$dir}";
+				if ( empty( $col ) || ! preg_match( '/^[a-zA-Z0-9_.`]+$/', $col ) ) {
+					return new WP_Error( 'invalid_order_column', __( 'Invalid ORDER BY column name.', 'dashboard-widget-manager' ) );
 				}
+				$column_ref = $this->parse_column_reference( $col, $table, $allowed_tables, $schema_by_table, true );
+				if ( is_wp_error( $column_ref ) ) {
+					return $column_ref;
+				}
+				$order_parts[] = "{$column_ref['qualified']} {$dir}";
 			}
 			if ( ! empty( $order_parts ) ) {
 				$sql .= "\nORDER BY " . implode( ', ', $order_parts );
@@ -296,11 +360,100 @@ class DWM_Query_Builder {
 		}
 
 		// --- Default template ---
-		$template = $this->generate_default_template( $table, $columns, $display_mode );
+		$template = $this->generate_default_template( $table, $template_columns, $display_mode );
 
 		return array(
 			'sql'      => $sql,
 			'template' => $template,
+			'css'      => $this->generate_default_css( $table, $template_columns, $display_mode ),
+			'scripts'  => $this->generate_default_scripts( $table, $template_columns, $display_mode ),
+		);
+	}
+
+	/**
+	 * Check if a table exists.
+	 *
+	 * @param string $table Table name.
+	 * @return bool
+	 */
+	private function table_exists( string $table ): bool {
+		global $wpdb;
+
+		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+	}
+
+	/**
+	 * Get database columns for a table.
+	 *
+	 * @param string $table Table name.
+	 * @return array
+	 */
+	private function get_table_columns( string $table ): array {
+		global $wpdb;
+
+		$columns = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return is_array( $columns ) ? $columns : array();
+	}
+
+	/**
+	 * Validate and normalize a column reference.
+	 *
+	 * @param string $column           Column token (table.column or column).
+	 * @param string $default_table    Table used when column is unqualified.
+	 * @param array  $allowed_tables   Tables allowed by current builder config.
+	 * @param array  $schema_by_table  Cached table=>columns map.
+	 * @param bool   $allow_backticks  Whether to strip backticks before parsing.
+	 * @return array|WP_Error
+	 */
+	private function parse_column_reference( string $column, string $default_table, array $allowed_tables, array &$schema_by_table, bool $allow_backticks = false ) {
+		$column = sanitize_text_field( $column );
+		if ( $allow_backticks ) {
+			$column = str_replace( '`', '', $column );
+		}
+
+		if ( ! preg_match( '/^[a-zA-Z0-9_.]+$/', $column ) ) {
+			return new WP_Error( 'invalid_column', __( 'Column format is invalid.', 'dashboard-widget-manager' ) );
+		}
+
+		if ( str_contains( $column, '.' ) ) {
+			$parts = explode( '.', $column, 2 );
+			$table = $parts[0];
+			$field = $parts[1];
+		} else {
+			$table = $default_table;
+			$field = $column;
+		}
+
+		if ( ! in_array( $table, $allowed_tables, true ) ) {
+			return new WP_Error(
+				'invalid_column_table',
+				sprintf(
+					/* translators: %s: table name */
+					__( 'Column references disallowed table "%s".', 'dashboard-widget-manager' ),
+					$table
+				)
+			);
+		}
+
+		if ( ! isset( $schema_by_table[ $table ] ) ) {
+			$schema_by_table[ $table ] = $this->get_table_columns( $table );
+		}
+		if ( empty( $schema_by_table[ $table ] ) || ! in_array( $field, $schema_by_table[ $table ], true ) ) {
+			return new WP_Error(
+				'invalid_column_name',
+				sprintf(
+					/* translators: 1: column name, 2: table name */
+					__( 'Column "%1$s" does not exist on table "%2$s".', 'dashboard-widget-manager' ),
+					$field,
+					$table
+				)
+			);
+		}
+
+		return array(
+			'table'     => $table,
+			'column'    => $field,
+			'qualified' => '`' . $table . '`.`' . $field . '`',
 		);
 	}
 
@@ -375,5 +528,35 @@ class DWM_Query_Builder {
 		$tpl .= "<?php endif; ?>";
 
 		return $tpl;
+	}
+
+	/**
+	 * Generate default scoped CSS for the built widget.
+	 *
+	 * @param string $table        Primary table name (unused, reserved for future use).
+	 * @param array  $columns      Selected columns (unused, reserved for future use).
+	 * @param string $display_mode 'table' or a chart type.
+	 * @return string CSS string.
+	 */
+	private function generate_default_css( string $table, array $columns, string $display_mode ): string {
+		if ( $display_mode !== 'table' ) {
+			return ".dwm-chart-wrapper {\n\tposition: relative;\n\tmax-width: 100%;\n}";
+		}
+
+		return ".dwm-table-wrapper {\n\toverflow-x: auto;\n\twidth: 100%;\n}\n\n.dwm-builder-table {\n\twidth: 100%;\n\tborder-collapse: collapse;\n\tfont-size: 14px;\n}\n\n.dwm-builder-table thead th {\n\tbackground: #f0f0f0;\n\tfont-weight: 600;\n\ttext-align: left;\n\tpadding: 10px 12px;\n\tborder-bottom: 2px solid #ddd;\n}\n\n.dwm-builder-table tbody td {\n\tpadding: 8px 12px;\n\tborder-bottom: 1px solid #eee;\n\tvertical-align: top;\n}\n\n.dwm-builder-table tbody tr:hover {\n\tbackground: #f9f9f9;\n}";
+	}
+
+	/**
+	 * Generate default JavaScript for the built widget.
+	 *
+	 * Chart rendering is handled by the plugin renderer; table mode needs no JS.
+	 *
+	 * @param string $table        Primary table name.
+	 * @param array  $columns      Selected columns.
+	 * @param string $display_mode 'table' or a chart type.
+	 * @return string JS string (empty for all current modes).
+	 */
+	private function generate_default_scripts( string $table, array $columns, string $display_mode ): string {
+		return '';
 	}
 }

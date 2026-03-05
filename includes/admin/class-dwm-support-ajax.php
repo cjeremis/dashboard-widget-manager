@@ -46,12 +46,29 @@ class DWM_Support_AJAX {
 	}
 
 	/**
+	 * Check whether live support sync is enabled.
+	 *
+	 * Disabled by default. Users must explicitly opt in via the Support Data Sharing setting.
+	 *
+	 * @return bool
+	 */
+	private function is_live_sync_enabled(): bool {
+		$settings = DWM_Data::get_instance()->get_settings();
+
+		return ! empty( $settings['support_data_sharing_opt_in'] );
+	}
+
+	/**
 	 * Sync remote support replies into local notifications for a user.
 	 *
 	 * @param int $user_id
 	 * @return void
 	 */
 	public function sync_notifications_for_user( int $user_id ): void {
+		if ( ! $this->is_live_sync_enabled() ) {
+			return;
+		}
+
 		if ( ! class_exists( 'DWM_Notifications' ) ) {
 			return;
 		}
@@ -160,6 +177,15 @@ class DWM_Support_AJAX {
 		$subject     = isset( $_POST['subject'] ) ? sanitize_text_field( wp_unslash( $_POST['subject'] ) ) : '';
 		$description = isset( $_POST['description'] ) ? wp_kses_post( wp_unslash( $_POST['description'] ) ) : '';
 		$priority    = isset( $_POST['priority'] ) ? sanitize_text_field( wp_unslash( $_POST['priority'] ) ) : 'normal';
+		$consent_raw = isset( $_POST['support_data_consent'] ) ? sanitize_text_field( wp_unslash( $_POST['support_data_consent'] ) ) : '';
+		$has_consent = in_array( $consent_raw, [ '1', 'true', 'on', 'yes' ], true );
+
+		if ( ! $has_consent ) {
+			wp_send_json_error(
+				[ 'message' => __( 'Consent is required to submit a support ticket with diagnostic data.', 'dashboard-widget-manager' ) ],
+				400
+			);
+		}
 
 		if ( empty( $subject ) || strlen( $subject ) < 5 ) {
 			wp_send_json_error(
@@ -175,26 +201,35 @@ class DWM_Support_AJAX {
 			);
 		}
 
-		$system_data   = $system_info->get_all_info();
 		$ticket_number = $this->generate_ticket_number();
 
 		$ticket_data = [
-			'ticket_number'      => $ticket_number,
-			'customer_email'     => $user_email,
-			'customer_site_url'  => home_url(),
-			'subject'            => $subject,
-			'description'        => $description,
-			'priority'           => $priority,
-			'status'             => 'new',
-			'wp_version'         => $system_data['wp_version'] ?? '',
-			'php_version'        => $system_data['php_version'] ?? '',
-			'theme_name'         => $system_data['theme_name'] ?? '',
-			'theme_version'      => $system_data['theme_version'] ?? '',
-			'active_plugins'     => $system_data['active_plugins'] ?? [],
-			'dwm_version'        => $system_data['dwm_version'] ?? '',
-			'customer_ip'        => $system_info->get_client_ip(),
-			'customer_user_agent' => $system_info->get_user_agent(),
+			'ticket_number'  => $ticket_number,
+			'customer_email' => $user_email,
+			'subject'        => $subject,
+			'description'    => $description,
+			'priority'       => $priority,
+			'status'         => 'new',
 		];
+
+		if ( $has_consent ) {
+			$system_data = $system_info->get_all_info();
+
+			$ticket_data = array_merge(
+				$ticket_data,
+				[
+					'customer_site_url'   => home_url(),
+					'wp_version'          => $system_data['wp_version'] ?? '',
+					'php_version'         => $system_data['php_version'] ?? '',
+					'theme_name'          => $system_data['theme_name'] ?? '',
+					'theme_version'       => $system_data['theme_version'] ?? '',
+					'active_plugins'      => $system_data['active_plugins'] ?? [],
+					'dwm_version'         => $system_data['dwm_version'] ?? '',
+					'customer_ip'         => $system_info->get_client_ip(),
+					'customer_user_agent' => $system_info->get_user_agent(),
+				]
+			);
+		}
 
 		$response = $this->api_request( 'POST', '/tickets', $ticket_data );
 

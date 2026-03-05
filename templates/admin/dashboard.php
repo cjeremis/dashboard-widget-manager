@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // Page wrapper configuration
 $current_page       = 'dashboard-widget-manager';
 $header_title       = __( 'Dashboard Widget Manager', 'dashboard-widget-manager' );
-$header_description = __( 'Create and manage custom WordPress dashboard widgets powered by SQL, PHP, HTML, CSS, and JavaScript.', 'dashboard-widget-manager' );
+$header_description = __( 'Track widget performance at a glance with usage stats, enabled counts, cache totals, and a quick view of your most recent widgets.', 'dashboard-widget-manager' );
 $topbar_actions     = [];
 
 include __DIR__ . '/partials/page-wrapper-start.php';

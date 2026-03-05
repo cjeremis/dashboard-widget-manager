@@ -30,7 +30,7 @@ class DWM_Demo_Data {
 	 * @return array|null Decoded demo data or null if not found/invalid.
 	 */
 	private function load_demo_data() {
-		$demo_file = DWM_PLUGIN_DIR . 'data/demo-data.json';
+		$demo_file = DWM_PLUGIN_DIR . 'includes/admin/data/demo-data.json';
 
 		if ( ! file_exists( $demo_file ) ) {
 			return null;
@@ -48,11 +48,11 @@ class DWM_Demo_Data {
 	 * @return bool
 	 */
 	public function demo_data_exists(): bool {
-		return file_exists( DWM_PLUGIN_DIR . 'data/demo-data.json' );
+		return file_exists( DWM_PLUGIN_DIR . 'includes/admin/data/demo-data.json' );
 	}
 
 	/**
-	 * AJAX handler to import demo widgets.
+	 * AJAX handler to import demo data (widgets + notifications).
 	 *
 	 * Accepts optional POST toggle: import_widgets (bool, default true).
 	 *
@@ -63,9 +63,10 @@ class DWM_Demo_Data {
 			return;
 		}
 
-		$import_widgets = ! isset( $_POST['import_widgets'] ) || filter_var( wp_unslash( $_POST['import_widgets'] ), FILTER_VALIDATE_BOOLEAN );
+		$import_widgets       = ! isset( $_POST['import_widgets'] ) || filter_var( wp_unslash( $_POST['import_widgets'] ), FILTER_VALIDATE_BOOLEAN );
+		$import_notifications = ! isset( $_POST['import_notifications'] ) || filter_var( wp_unslash( $_POST['import_notifications'] ), FILTER_VALIDATE_BOOLEAN );
 
-		if ( ! $import_widgets ) {
+		if ( ! $import_widgets && ! $import_notifications ) {
 			$this->send_error( __( 'Please select at least one data type to import.', 'dashboard-widget-manager' ), 400 );
 			return;
 		}
@@ -76,22 +77,27 @@ class DWM_Demo_Data {
 			return;
 		}
 
-		$count = 0;
+		$widget_count       = 0;
+		$notification_count = 0;
 
 		if ( $import_widgets && isset( $demo_data['widgets'] ) && is_array( $demo_data['widgets'] ) ) {
-			$count = $this->import_demo_widgets( $demo_data['widgets'] );
+			$widget_count = $this->import_demo_widgets( $demo_data['widgets'] );
 		}
 
-		$message = $count > 0
-			/* translators: %d: number of widgets imported */
-			? sprintf( _n( '%d widget imported.', '%d widgets imported.', $count, 'dashboard-widget-manager' ), $count )
-			: __( 'No widgets were imported.', 'dashboard-widget-manager' );
+		if ( $import_notifications && isset( $demo_data['notifications'] ) && is_array( $demo_data['notifications'] ) ) {
+			$notification_count = $this->import_demo_notifications( $demo_data['notifications'] );
+		}
 
-		$this->send_success( $message, array( 'count' => $count ) );
+		$count   = $widget_count + $notification_count;
+		/* translators: %1$d: widgets imported, %2$d: notifications imported */
+		$message = sprintf( __( '%1$d widget(s) and %2$d notification(s) imported.', 'dashboard-widget-manager' ), $widget_count, $notification_count );
+
+		$this->send_success( $message, array( 'count' => $count, 'widgets' => $widget_count, 'notifications' => $notification_count ) );
 	}
 
 	/**
-	 * AJAX handler to delete all demo widgets.
+	 * AJAX handler to delete all demo data (widgets + notifications).
+	 * Never touches real (non-demo) widgets, settings, or notifications.
 	 *
 	 * @return void
 	 */
@@ -100,15 +106,14 @@ class DWM_Demo_Data {
 			return;
 		}
 
-		$data    = DWM_Data::get_instance();
-		$deleted = $data->delete_demo_widgets();
+		$data                = DWM_Data::get_instance();
+		$deleted_widgets     = $data->delete_demo_widgets();
+		$deleted_notifs      = DWM_Notifications::get_instance()->delete_demo_notifications();
 
-		$message = $deleted > 0
-			/* translators: %d: number of widgets deleted */
-			? sprintf( _n( '%d demo widget deleted.', '%d demo widgets deleted.', $deleted, 'dashboard-widget-manager' ), $deleted )
-			: __( 'No demo widgets found to delete.', 'dashboard-widget-manager' );
+		/* translators: %1$d: widgets deleted, %2$d: notifications deleted */
+		$message = sprintf( __( '%1$d demo widget(s) and %2$d demo notification(s) deleted.', 'dashboard-widget-manager' ), $deleted_widgets, $deleted_notifs );
 
-		$this->send_success( $message, array( 'deleted' => $deleted ) );
+		$this->send_success( $message, array( 'widgets' => $deleted_widgets, 'notifications' => $deleted_notifs ) );
 	}
 
 	/**
@@ -141,14 +146,59 @@ class DWM_Demo_Data {
 			$widget['is_demo'] = 1;
 
 			// Sanitize key fields.
-			$widget['name']        = sanitize_text_field( $widget['name'] );
-			$widget['description'] = isset( $widget['description'] ) ? sanitize_text_field( $widget['description'] ) : '';
-			$widget['enabled']     = isset( $widget['enabled'] ) ? (int) $widget['enabled'] : 1;
+			$widget['name']         = sanitize_text_field( $widget['name'] );
+			$widget['description']  = isset( $widget['description'] ) ? sanitize_text_field( $widget['description'] ) : '';
+			$widget['enabled']      = isset( $widget['enabled'] ) ? (int) $widget['enabled'] : 1;
 			$widget['widget_order'] = isset( $widget['widget_order'] ) ? (int) $widget['widget_order'] : 0;
 
 			$new_id = $data->create_widget( $widget );
 
 			if ( $new_id ) {
+				$count++;
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Import notifications from demo data.
+	 *
+	 * All demo notification types must start with 'demo_' so they can be
+	 * targeted by delete_demo_notifications() without touching real notifications.
+	 * Uses add_notification() which skips duplicates by type+user.
+	 *
+	 * @param array $notifications_data Array of notification objects from demo JSON.
+	 * @return int Count of notifications created.
+	 */
+	private function import_demo_notifications( array $notifications_data ): int {
+		$notifications = DWM_Notifications::get_instance();
+		$count         = 0;
+
+		foreach ( $notifications_data as $notif ) {
+			if ( ! is_array( $notif ) || empty( $notif['type'] ) ) {
+				continue;
+			}
+
+			$type    = sanitize_text_field( $notif['type'] );
+			$title   = sanitize_text_field( $notif['title'] ?? '' );
+			$message = sanitize_text_field( $notif['message'] ?? '' );
+			$icon    = sanitize_text_field( $notif['icon'] ?? 'info' );
+			$actions = [];
+
+			if ( ! empty( $notif['actions'] ) && is_array( $notif['actions'] ) ) {
+				foreach ( $notif['actions'] as $action ) {
+					if ( ! empty( $action['label'] ) && ! empty( $action['url'] ) ) {
+						$actions[] = [
+							'label' => sanitize_text_field( $action['label'] ),
+							'url'   => sanitize_text_field( $action['url'] ),
+						];
+					}
+				}
+			}
+
+			$result = $notifications->add_notification( $type, $title, $message, $icon, $actions );
+			if ( $result ) {
 				$count++;
 			}
 		}

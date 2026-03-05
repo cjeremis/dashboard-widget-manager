@@ -16,20 +16,64 @@ if ( ! defined( 'ABSPATH' ) ) {
 // Check if Pro is fully enabled (installed, active, AND licensed)
 $is_pro_enabled = class_exists( 'DWM_Pro_Feature_Gate' ) && DWM_Pro_Feature_Gate::is_pro_enabled();
 
-// Check if Pro is active but missing license key (show hardcoded license CTA)
-$show_license_cta = false;
+// Build upsell CTA state — shown in all non-enabled states, hidden only when Pro is fully active
+$show_upsell_cta  = false;
+$upsell_state     = '';
+$upsell_title     = '';
+$upsell_message   = '';
+$upsell_btn_label = '';
+$upsell_btn_url   = '';
+$upsell_btn_icon  = '';
+$upsell_btn_class = '';
+$upsell_btn_attrs = '';
+
 if ( ! $is_pro_enabled ) {
+	$show_upsell_cta  = true;
 	$pro_plugin_file  = 'dashboard-widget-manager-pro/dashboard-widget-manager-pro.php';
-	$pro_plugin_path  = WP_PLUGIN_DIR . '/' . $pro_plugin_file;
-	$is_pro_installed = file_exists( $pro_plugin_path );
+	$is_pro_installed = file_exists( WP_PLUGIN_DIR . '/' . $pro_plugin_file );
 
 	if ( ! function_exists( 'is_plugin_active' ) ) {
 		include_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
-	$is_pro_active = $is_pro_installed && is_plugin_active( $pro_plugin_file );
+	$is_pro_active = is_plugin_active( $pro_plugin_file );
 
-	// Show license CTA if Pro is active but not fully enabled (missing license)
-	$show_license_cta = $is_pro_active;
+	if ( ! $is_pro_installed ) {
+		$upsell_state     = 'not-installed';
+		$upsell_title     = __( 'Upgrade to Pro', 'dashboard-widget-manager' );
+		$upsell_message   = __( 'Purchase and install the Pro version to unlock advanced features.', 'dashboard-widget-manager' );
+		$upsell_btn_label = __( 'Upgrade to Pro', 'dashboard-widget-manager' );
+		$upsell_btn_url   = admin_url( 'admin.php?page=dwm-settings' );
+		$upsell_btn_icon  = 'star-filled';
+		$upsell_btn_class = 'dwm-upgrade-button';
+	} elseif ( ! $is_pro_active ) {
+		$upsell_state     = 'inactive';
+		$upsell_title     = __( 'Pro is Installed', 'dashboard-widget-manager' );
+		$upsell_message   = __( 'Activate the Pro plugin and enter your license key to unlock premium features.', 'dashboard-widget-manager' );
+		$upsell_btn_label = __( 'Upgrade to Pro', 'dashboard-widget-manager' );
+		$upsell_btn_url   = admin_url( 'admin.php?page=dwm-settings' );
+		$upsell_btn_icon  = 'star-filled';
+		$upsell_btn_class = 'dwm-upgrade-button';
+	} else {
+		$has_api_key = class_exists( 'DWM_Pro_Feature_Gate' ) && ! empty( DWM_Pro_Feature_Gate::get_license_key() );
+		if ( ! $has_api_key ) {
+			$upsell_state     = 'no-key';
+			$upsell_title     = __( 'Pro Plugin Installed', 'dashboard-widget-manager' );
+			$upsell_message   = __( 'Enter your Dashboard Widget Manager Pro license key to unlock all premium features.', 'dashboard-widget-manager' );
+			$upsell_btn_label = __( 'Add License Key', 'dashboard-widget-manager' );
+			$upsell_btn_url   = admin_url( 'admin.php?page=dwm-settings#dwm-pro-license-key' );
+			$upsell_btn_icon  = 'unlock';
+			$upsell_btn_class = 'dwm-add-api-key-button';
+			$upsell_btn_attrs = 'data-scroll-to="dwm-pro-license-key" data-focus-field="dwm_pro_license_key"';
+		} else {
+			$upsell_state     = 'unlicensed';
+			$upsell_title     = __( 'License Key Required', 'dashboard-widget-manager' );
+			$upsell_message   = __( 'Your Dashboard Widget Manager Pro license key is invalid or expired. Renew your license to continue using Pro features.', 'dashboard-widget-manager' );
+			$upsell_btn_label = __( 'Upgrade to Pro', 'dashboard-widget-manager' );
+			$upsell_btn_url   = admin_url( 'admin.php?page=dwm-settings' );
+			$upsell_btn_icon  = 'star-filled';
+			$upsell_btn_class = 'dwm-upgrade-button';
+		}
+	}
 }
 
 // Get initial notifications server-side for instant load
@@ -63,25 +107,24 @@ $count = count( $notifications );
 
 	<!-- Panel Body - Initial content rendered server-side -->
 	<div class="dwm-notifications-body">
-		<?php if ( $show_license_cta ) : ?>
-			<!-- Hardcoded License CTA - Pro active but missing license key -->
-			<!-- This is NOT a notification, just a persistent call-to-action -->
-			<div class="dwm-notification-item dwm-notification-item--license-cta" data-notification-id="license-cta" data-notification-type="pro_api_key_missing">
+		<?php if ( $show_upsell_cta ) : ?>
+			<!-- Pro Upsell CTA - visible in all non-enabled states -->
+			<div class="dwm-notification-item dwm-notification-item--upsell-cta dwm-notification-item--<?php echo esc_attr( $upsell_state ); ?>" data-notification-id="upsell-cta" data-notification-type="pro_upsell">
 				<div class="dwm-notification-license-glow"></div>
 				<div class="dwm-notification-license-header">
 					<div class="dwm-notification-license-icon">
 						<span class="dashicons dashicons-star-filled dwm-animate-slow"></span>
 					</div>
 					<div class="dwm-notification-license-text">
-						<h4 class="dwm-notification-license-title"><?php esc_html_e( 'Pro Plugin Installed', 'dashboard-widget-manager' ); ?></h4>
+						<h4 class="dwm-notification-license-title"><?php echo esc_html( $upsell_title ); ?></h4>
 						<span class="dwm-pro-badge dwm-pro-badge-inline"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
 					</div>
 				</div>
-				<p class="dwm-notification-license-message"><?php esc_html_e( 'Enter your Dashboard Widget Manager Pro license key to unlock all premium features.', 'dashboard-widget-manager' ); ?></p>
+				<p class="dwm-notification-license-message"><?php echo esc_html( $upsell_message ); ?></p>
 				<div class="dwm-notification-license-actions">
-					<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-settings#dwm-pro-license-key' ) ); ?>" class="dwm-button dwm-pro-upgrade-button dwm-pro-upgrade-button--primary dwm-button-primary dwm-add-api-key-button" data-scroll-to="dwm-pro-license-key" data-focus-field="dwm_pro_license_key">
-						<span class="dashicons dashicons-unlock"></span>
-						<span class="dwm-pro-upgrade-button__label"><?php esc_html_e( 'Add License Key', 'dashboard-widget-manager' ); ?></span>
+					<a href="<?php echo esc_url( $upsell_btn_url ); ?>" class="dwm-button dwm-pro-upgrade-button dwm-pro-upgrade-button--primary dwm-button-primary <?php echo esc_attr( $upsell_btn_class ); ?>" <?php echo $upsell_btn_attrs; ?>>
+						<span class="dashicons dashicons-<?php echo esc_attr( $upsell_btn_icon ); ?>"></span>
+						<span class="dwm-pro-upgrade-button__label"><?php echo esc_html( $upsell_btn_label ); ?></span>
 					</a>
 				</div>
 			</div>

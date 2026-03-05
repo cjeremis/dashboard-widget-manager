@@ -52,17 +52,21 @@ class DWM_Activator {
 
 		$sql_widgets = "CREATE TABLE IF NOT EXISTS {$widgets_table} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			uuid char(36) NOT NULL,
 			name varchar(255) NOT NULL,
 			description text DEFAULT '',
 			sql_query text NOT NULL,
 			template text DEFAULT '',
 			styles text DEFAULT '',
 			scripts text DEFAULT '',
+			no_results_template text DEFAULT '',
+			output_config longtext DEFAULT NULL,
 			status varchar(20) NOT NULL DEFAULT 'draft',
 			enabled tinyint(1) NOT NULL DEFAULT 0,
 			widget_order int(11) NOT NULL DEFAULT 0,
 			cache_duration int(11) NOT NULL DEFAULT 300,
 			enable_caching tinyint(1) NOT NULL DEFAULT 1,
+			auto_refresh tinyint(1) NOT NULL DEFAULT 0,
 			max_execution_time int(11) NOT NULL DEFAULT 30,
 			enable_query_logging tinyint(1) NOT NULL DEFAULT 0,
 			is_demo tinyint(1) NOT NULL DEFAULT 0,
@@ -71,6 +75,7 @@ class DWM_Activator {
 			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			created_by bigint(20) unsigned NOT NULL,
 			PRIMARY KEY (id),
+			UNIQUE KEY uuid (uuid),
 			KEY status (status),
 			KEY enabled (enabled),
 			KEY widget_order (widget_order),
@@ -140,7 +145,7 @@ class DWM_Activator {
 		}
 
 		$default_settings = array(
-			'allowed_tables' => '',
+			'excluded_tables' => '',
 		);
 
 		if ( ! $repository->exists( 'settings' ) ) {
@@ -164,11 +169,38 @@ class DWM_Activator {
 	public static function maybe_upgrade() {
 		global $wpdb;
 
+		// Create the notifications table if it doesn't exist yet (added after initial activation).
+		$notifications_table = $wpdb->prefix . self::TABLE_NOTIFICATIONS;
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $notifications_table ) ) !== $notifications_table ) {
+			$charset_collate     = $wpdb->get_charset_collate();
+			$sql_notifications   = "CREATE TABLE IF NOT EXISTS {$notifications_table} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				user_id bigint(20) unsigned NOT NULL,
+				type varchar(100) NOT NULL,
+				title varchar(255) NOT NULL,
+				message text NOT NULL,
+				icon varchar(100) NOT NULL DEFAULT 'info',
+				actions longtext DEFAULT NULL,
+				dismissed tinyint(1) NOT NULL DEFAULT 0,
+				created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY (id),
+				KEY user_id (user_id),
+				KEY type (type),
+				KEY dismissed (dismissed)
+			) {$charset_collate};";
+			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+			dbDelta( $sql_notifications );
+		}
+
 		$table   = $wpdb->prefix . self::TABLE_WIDGETS;
 		$columns = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
 
 		if ( ! in_array( 'enable_caching', $columns, true ) ) {
 			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `enable_caching` tinyint(1) NOT NULL DEFAULT 1 AFTER `cache_duration`" );
+		}
+
+		if ( ! in_array( 'auto_refresh', $columns, true ) ) {
+			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `auto_refresh` tinyint(1) NOT NULL DEFAULT 0 AFTER `enable_caching`" );
 		}
 
 		if ( ! in_array( 'max_execution_time', $columns, true ) ) {
@@ -201,11 +233,50 @@ class DWM_Activator {
 			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `builder_config` longtext DEFAULT NULL AFTER `chart_config`" );
 		}
 
+		if ( ! in_array( 'no_results_template', $columns, true ) ) {
+			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `no_results_template` text DEFAULT '' AFTER `scripts`" );
+		}
+
+		if ( ! in_array( 'output_config', $columns, true ) ) {
+			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `output_config` longtext DEFAULT NULL AFTER `builder_config`" );
+		}
+
 		if ( ! in_array( 'status', $columns, true ) ) {
 			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `status` varchar(20) NOT NULL DEFAULT 'draft' AFTER `builder_config`" );
 			$wpdb->query( "UPDATE `{$table}` SET `status` = 'publish' WHERE `enabled` = 1" );
 			$wpdb->query( "UPDATE `{$table}` SET `status` = 'draft' WHERE `enabled` = 0" );
 			$wpdb->query( "ALTER TABLE `{$table}` ADD KEY `status` (`status`)" );
+		}
+
+		if ( ! in_array( 'uuid', $columns, true ) ) {
+			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `uuid` char(36) DEFAULT NULL AFTER `id`" );
+		}
+
+		$missing_uuid_rows = $wpdb->get_results( "SELECT id FROM `{$table}` WHERE uuid IS NULL OR uuid = ''", ARRAY_A );
+		if ( ! empty( $missing_uuid_rows ) ) {
+			foreach ( $missing_uuid_rows as $row ) {
+				$wpdb->update(
+					$table,
+					array( 'uuid' => wp_generate_uuid4() ),
+					array( 'id' => (int) $row['id'] ),
+					array( '%s' ),
+					array( '%d' )
+				);
+			}
+		}
+
+		$wpdb->query( "ALTER TABLE `{$table}` MODIFY COLUMN `uuid` char(36) NOT NULL" );
+
+		$uuid_index_exists = false;
+		$indexes           = $wpdb->get_results( "SHOW INDEX FROM `{$table}`", ARRAY_A );
+		foreach ( $indexes as $index ) {
+			if ( isset( $index['Key_name'] ) && 'uuid' === $index['Key_name'] ) {
+				$uuid_index_exists = true;
+				break;
+			}
+		}
+		if ( ! $uuid_index_exists ) {
+			$wpdb->query( "ALTER TABLE `{$table}` ADD UNIQUE KEY `uuid` (`uuid`)" );
 		}
 	}
 

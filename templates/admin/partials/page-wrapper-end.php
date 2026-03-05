@@ -22,9 +22,6 @@ include __DIR__ . '/footer.php';
 // Render notifications panel (content populated by AJAX)
 include __DIR__ . '/notifications-panel.php';
 
-// Render features modal (available on all DWM admin pages)
-include DWM_PLUGIN_DIR . 'templates/admin/modals/features-modal.php';
-
 // Render docs modal (available on all DWM admin pages)
 include DWM_PLUGIN_DIR . 'templates/admin/modals/docs-modal.php';
 
@@ -33,4 +30,7 @@ include DWM_PLUGIN_DIR . 'templates/admin/partials/support-ticket-form.php';
 
 // Render pro upgrade modal (available on all DWM admin pages)
 include DWM_PLUGIN_DIR . 'templates/admin/modals/pro-upgrade.php';
+
+// Render features modal LAST so it stacks on top of the pro upgrade modal
+include DWM_PLUGIN_DIR . 'templates/admin/modals/features-modal.php';
 ?>

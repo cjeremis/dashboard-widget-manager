@@ -26,16 +26,17 @@ $input_id               = $input_id ?? 'dwm-pro-license-key';
 $input_name             = $input_name ?? 'dwm_pro_license_key';
 $activate_button_id     = $activate_button_id ?? 'dwm-license-activate';
 $deactivate_button_id   = $deactivate_button_id ?? 'dwm-license-deactivate';
+$typed_key_length       = strlen( trim( $license_key ) );
+$activate_disabled      = ( ! $is_license_active && $typed_key_length < (int) $license_key_min_length );
 
 $badge_variant = $is_license_active ? 'success' : 'inactive';
 $badge_text    = $is_license_active ? __( 'Active', 'dashboard-widget-manager' ) : __( 'Inactive', 'dashboard-widget-manager' );
 ?>
 <div class="dwm-section" id="<?php echo esc_attr( $section_id ); ?>" data-license-status="<?php echo esc_attr( $license_status ); ?>" data-min-length="<?php echo esc_attr( $license_key_min_length ); ?>">
 	<?php
-	$title_raw       = esc_html( $section_title ) . ' <span class="dwm-license-status-badge dwm-license-badge-' . esc_attr( $badge_variant ) . '" id="dwm-license-status-badge">' . esc_html( $badge_text ) . '</span>';
-	$help_icon_label = __( 'View license help', 'dashboard-widget-manager' );
+	$title_raw = esc_html( $section_title ) . ' <span class="dwm-license-status-badge dwm-license-badge-' . esc_attr( $badge_variant ) . '" id="dwm-license-status-badge">' . esc_html( $badge_text ) . '</span>';
 	include __DIR__ . '/section-header-with-actions.php';
-	unset( $title_raw, $help_icon_label );
+	unset( $title_raw );
 	?>
 
 	<div class="dwm-form-group">
@@ -54,8 +55,9 @@ $badge_text    = $is_license_active ? __( 'Active', 'dashboard-widget-manager' )
 				<?php echo $has_saved_license ? 'disabled="disabled"' : ''; ?>
 				data-actual-key="<?php echo esc_attr( $license_key ); ?>"
 				class="dwm-license-key-input"
+				style="flex: 1;"
 			/>
-			<button type="button" class="dwm-button dwm-button-primary" id="<?php echo esc_attr( $activate_button_id ); ?>" <?php echo $has_saved_license ? 'style="display:none;"' : ''; ?>>
+			<button type="button" class="dwm-button dwm-button-primary" id="<?php echo esc_attr( $activate_button_id ); ?>" <?php echo $has_saved_license ? 'style="display:none;"' : ''; ?> <?php echo $activate_disabled ? 'disabled="disabled"' : ''; ?>>
 				<?php echo esc_html( $is_license_active ? __( 'Refresh License', 'dashboard-widget-manager' ) : __( 'Activate License', 'dashboard-widget-manager' ) ); ?>
 			</button>
 			<?php if ( $has_saved_license ) : ?>

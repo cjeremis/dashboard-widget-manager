@@ -36,7 +36,7 @@ class DWM_Admin {
 		// Base admin styles.
 		wp_enqueue_style(
 			'dwm-admin',
-			DWM_PLUGIN_URL . 'assets/css/minimized/admin/global.min.css',
+			DWM_PLUGIN_URL . 'assets/minimized/css/global.min.css',
 			array(),
 			DWM_VERSION,
 			'all'
@@ -50,7 +50,7 @@ class DWM_Admin {
 		if ( strpos( $hook, 'dashboard-widget-manager' ) !== false && strpos( $hook, 'dwm-' ) === false ) {
 			wp_enqueue_style(
 				'dwm-dashboard',
-				DWM_PLUGIN_URL . 'assets/css/minimized/admin/dashboard.min.css',
+				DWM_PLUGIN_URL . 'assets/minimized/css/dashboard.min.css',
 				array( 'dwm-admin' ),
 				DWM_VERSION,
 				'all'
@@ -59,6 +59,26 @@ class DWM_Admin {
 			// CodeMirror for code editing.
 			wp_enqueue_code_editor( array( 'type' => 'application/x-httpd-php' ) );
 			wp_enqueue_style( 'wp-codemirror' );
+		}
+
+		if ( 'widget-manager_page_dwm-settings' === $hook ) {
+			wp_enqueue_style(
+				'dwm-settings',
+				DWM_PLUGIN_URL . 'assets/minimized/css/settings.min.css',
+				array( 'dwm-admin' ),
+				DWM_VERSION,
+				'all'
+			);
+		}
+
+		if ( 'widget-manager_page_dwm-tools' === $hook ) {
+			wp_enqueue_style(
+				'dwm-tools',
+				DWM_PLUGIN_URL . 'assets/minimized/css/tools.min.css',
+				array( 'dwm-admin' ),
+				DWM_VERSION,
+				'all'
+			);
 		}
 	}
 
@@ -74,14 +94,21 @@ class DWM_Admin {
 		if ( 'index.php' !== $hook ) {
 			return;
 		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 
 		$data    = DWM_Data::get_instance();
 		$widgets = $data->get_widgets();
 
-		$create_url   = esc_url( admin_url( 'admin.php?page=dashboard-widget-manager' ) );
+		$create_url   = esc_url( admin_url( 'admin.php?page=dashboard-widget-manager&action=create' ) );
 		$button_label = esc_js( __( 'New Widget', 'dashboard-widget-manager' ) );
 
 		wp_add_inline_style( 'wp-admin', '
+			[id^="dwm_widget_"] .inside {
+				padding: 0;
+				margin: 6px;
+			}
 			.dwm-dashboard-new-widget-btn {
 				display: inline-flex;
 				align-items: center;
@@ -298,6 +325,77 @@ class DWM_Admin {
 				background: #fef3c7;
 				color: #92400e;
 			}
+			.dwm-picker-filters {
+				display: flex;
+				flex-direction: column;
+				gap: 10px;
+				margin-bottom: 12px;
+			}
+			.dwm-picker-status-filters {
+				display: flex;
+				align-items: center;
+				gap: 4px;
+				flex-wrap: wrap;
+			}
+			.dwm-picker-filter-btn {
+				background: none;
+				border: none;
+				font-size: 12px;
+				color: #6b7280;
+				cursor: pointer;
+				padding: 2px 4px;
+				border-radius: 3px;
+				transition: color 0.15s;
+				line-height: 1.4;
+			}
+			.dwm-picker-filter-btn:hover { color: #374151; }
+			.dwm-picker-filter-btn.is-active {
+				color: #1f2937;
+				font-weight: 600;
+			}
+			.dwm-picker-filter-sep {
+				color: #d1d5db;
+				font-size: 12px;
+				user-select: none;
+			}
+			.dwm-picker-filter-count {
+				display: inline-block;
+				background: #e5e7eb;
+				color: #374151;
+				font-size: 10px;
+				font-weight: 600;
+				padding: 1px 5px;
+				border-radius: 10px;
+				margin-right: 2px;
+			}
+			.dwm-picker-filter-btn.is-active .dwm-picker-filter-count {
+				background: #667eea;
+				color: #fff;
+			}
+			.dwm-picker-search-input {
+				width: 100%;
+				padding: 7px 10px;
+				border: 1px solid #d1d5db;
+				border-radius: 6px;
+				font-size: 13px;
+				color: #374151;
+				background: #f9fafb;
+				box-sizing: border-box;
+				transition: border-color 0.15s, box-shadow 0.15s;
+			}
+			.dwm-picker-search-input:focus {
+				outline: none;
+				border-color: #667eea;
+				background: #fff;
+				box-shadow: 0 0 0 2px rgba(102,126,234,0.15);
+			}
+			.dwm-picker-no-results {
+				color: #9ca3af;
+				font-size: 13px;
+				text-align: center;
+				padding: 16px 0;
+				margin: 0;
+			}
 			.dwm-picker-confirm-text {
 				font-size: 14px;
 				color: #374151;
@@ -367,6 +465,56 @@ class DWM_Admin {
 				});
 			' );
 		}
+
+		// Hide selected default WP dashboard widgets and their Screen Options entries.
+		$settings           = $data->get_settings();
+		$override_css       = '';
+		$hidden_widgets_raw = $settings['hidden_dashboard_widgets'] ?? '';
+		if ( ! empty( $hidden_widgets_raw ) ) {
+			$hidden_widgets_arr  = array_filter( array_map( 'trim', explode( "\n", $hidden_widgets_raw ) ) );
+			$widget_screen_ids   = array(
+				'welcome-panel'         => 'wp_welcome_panel',
+				'dashboard_activity'    => 'dashboard_activity',
+				'dashboard_right_now'   => 'dashboard_right_now',
+				'dashboard_quick_press' => 'dashboard_quick_press',
+				'dashboard_site_health' => 'dashboard_site_health',
+				'dashboard_primary'     => 'dashboard_primary',
+			);
+			foreach ( $hidden_widgets_arr as $widget_id ) {
+				if ( ! isset( $widget_screen_ids[ $widget_id ] ) ) {
+					continue;
+				}
+				$override_css .= '#' . sanitize_key( $widget_id ) . ' { display: none !important; }';
+				$screen_id     = $widget_screen_ids[ $widget_id ];
+				$override_css .= 'label[for="' . esc_attr( $screen_id ) . '-hide"] { display: none !important; }';
+			}
+		}
+
+		if ( $override_css ) {
+			wp_add_inline_style( 'wp-admin', $override_css );
+		}
+	}
+
+	/**
+	 * Hide Help and/or Screen Options on all admin pages when enabled in settings.
+	 */
+	public function hide_admin_chrome() {
+		$data             = DWM_Data::get_instance();
+		$settings         = $data->get_settings();
+		$hide_help        = ! empty( $settings['hide_help_dropdown'] );
+		$hide_screen_opts = ! empty( $settings['hide_screen_options'] );
+
+		$css = '';
+		if ( $hide_help ) {
+			$css .= '#contextual-help-link-wrap { display: none !important; }';
+		}
+		if ( $hide_screen_opts ) {
+			$css .= '#screen-options-link-wrap { display: none !important; }';
+		}
+
+		if ( $css ) {
+			wp_add_inline_style( 'wp-admin', $css );
+		}
 	}
 
 	/**
@@ -377,19 +525,25 @@ class DWM_Admin {
 		$data    = DWM_Data::get_instance();
 		$widgets = $data->get_widgets();
 
-		$create_url = esc_url( admin_url( 'admin.php?page=dashboard-widget-manager' ) );
+		$create_url = esc_url( admin_url( 'admin.php?page=dashboard-widget-manager&action=create' ) );
 		$ajax_url   = esc_url( admin_url( 'admin-ajax.php' ) );
 		$nonce      = wp_create_nonce( 'dwm_admin_nonce' );
 
 		// Build widget list JSON for JS.
-		$widget_data = array();
+		$widget_data      = array();
+		$selectable_count = 0;
 		foreach ( $widgets as $w ) {
+			$status = $w['status'] ?? 'draft';
 			$widget_data[] = array(
 				'id'      => (int) $w['id'],
 				'name'    => $w['name'],
 				'desc'    => $w['description'],
 				'enabled' => (bool) $w['enabled'],
+				'status'  => $status,
 			);
+			if ( 'archived' !== $status && 'trash' !== $status ) {
+				$selectable_count++;
+			}
 		}
 
 		?>
@@ -411,13 +565,15 @@ class DWM_Admin {
 							<a href="<?php echo $create_url; ?>" class="dwm-picker-choice">
 								<span class="dashicons dashicons-plus-alt2"></span>
 								<strong><?php esc_html_e( 'Create New', 'dashboard-widget-manager' ); ?></strong>
-								<span><?php esc_html_e( 'Build a new widget from scratch', 'dashboard-widget-manager' ); ?></span>
+								<span><?php esc_html_e( 'Build a new widget manually', 'dashboard-widget-manager' ); ?></span>
 							</a>
+							<?php if ( $selectable_count > 0 ) : ?>
 							<button type="button" class="dwm-picker-choice" id="dwm-picker-show-list">
 								<span class="dashicons dashicons-list-view"></span>
 								<strong><?php esc_html_e( 'Select Existing', 'dashboard-widget-manager' ); ?></strong>
 								<span><?php esc_html_e( 'Choose from your saved widgets', 'dashboard-widget-manager' ); ?></span>
 							</button>
+						<?php endif; ?>
 						</div>
 					</div>
 
@@ -426,7 +582,18 @@ class DWM_Admin {
 						<button type="button" class="dwm-picker-back" id="dwm-picker-back-1">
 							&larr; <?php esc_html_e( 'Back', 'dashboard-widget-manager' ); ?>
 						</button>
+						<div class="dwm-picker-filters">
+							<div class="dwm-picker-status-filters" id="dwm-picker-status-filters">
+								<button type="button" class="dwm-picker-filter-btn" data-filter="all"><?php esc_html_e( 'All', 'dashboard-widget-manager' ); ?></button>
+								<span class="dwm-picker-filter-sep">|</span>
+								<button type="button" class="dwm-picker-filter-btn is-active" data-filter="active"><span class="dwm-picker-filter-count" id="dwm-picker-count-active">0</span> <?php esc_html_e( 'Active', 'dashboard-widget-manager' ); ?></button>
+								<span class="dwm-picker-filter-sep">|</span>
+								<button type="button" class="dwm-picker-filter-btn" data-filter="draft"><span class="dwm-picker-filter-count" id="dwm-picker-count-draft">0</span> <?php esc_html_e( 'Draft', 'dashboard-widget-manager' ); ?></button>
+							</div>
+							<input type="search" id="dwm-picker-search" placeholder="<?php esc_attr_e( 'Search widgets...', 'dashboard-widget-manager' ); ?>" class="dwm-picker-search-input" />
+						</div>
 						<div class="dwm-widget-list" id="dwm-picker-widget-list"></div>
+						<p class="dwm-picker-no-results" id="dwm-picker-no-results" style="display:none;"><?php esc_html_e( 'No widgets match your search.', 'dashboard-widget-manager' ); ?></p>
 					</div>
 
 					<!-- Step 3: Confirm enable draft -->
@@ -451,10 +618,11 @@ class DWM_Admin {
 
 		<script type="text/javascript">
 		(function($) {
-			var widgets    = <?php echo wp_json_encode( $widget_data ); ?>;
-			var ajaxUrl    = '<?php echo $ajax_url; ?>';
-			var nonce      = '<?php echo esc_js( $nonce ); ?>';
-			var pendingId  = null;
+			var widgets       = <?php echo wp_json_encode( $widget_data ); ?>;
+			var ajaxUrl       = '<?php echo $ajax_url; ?>';
+			var nonce         = '<?php echo esc_js( $nonce ); ?>';
+			var pendingId     = null;
+			var currentFilter = 'active';
 
 			function openPicker() {
 				showStep(1);
@@ -475,15 +643,56 @@ class DWM_Admin {
 
 			function buildWidgetList() {
 				var $list = $('#dwm-picker-widget-list').empty();
-				if ( ! widgets.length ) {
+
+				// Exclude archived and trashed widgets.
+				var selectable = $.grep(widgets, function(w) {
+					return w.status !== 'archived' && w.status !== 'trash';
+				});
+
+				// Update filter counts.
+				var activeCount = $.grep(selectable, function(w) { return w.enabled; }).length;
+				var draftCount  = $.grep(selectable, function(w) { return !w.enabled; }).length;
+				$('#dwm-picker-count-active').text(activeCount);
+				$('#dwm-picker-count-draft').text(draftCount);
+
+				// Show/hide filter buttons based on counts.
+				var $filters = $('#dwm-picker-status-filters');
+				var $allBtn    = $filters.find('.dwm-picker-filter-btn[data-filter="all"]');
+				var $activeBtn = $filters.find('.dwm-picker-filter-btn[data-filter="active"]');
+				var $draftBtn  = $filters.find('.dwm-picker-filter-btn[data-filter="draft"]');
+				var $seps      = $filters.find('.dwm-picker-filter-sep');
+
+				var showAll    = activeCount > 0 && draftCount > 0;
+				var showActive = activeCount > 0;
+				var showDraft  = draftCount > 0;
+
+				$allBtn.toggle(showAll);
+				$seps.eq(0).toggle(showAll);
+				$activeBtn.toggle(showActive);
+				$seps.eq(1).toggle(showDraft);
+				$draftBtn.toggle(showDraft);
+
+				// If current filter is no longer shown, reset to visible default.
+				if ( currentFilter === 'all' && !showAll ) {
+					currentFilter = showActive ? 'active' : 'draft';
+				} else if ( currentFilter === 'active' && !showActive ) {
+					currentFilter = showDraft ? 'draft' : 'all';
+				} else if ( currentFilter === 'draft' && !showDraft ) {
+					currentFilter = showActive ? 'active' : 'all';
+				}
+				$filters.find('.dwm-picker-filter-btn').removeClass('is-active');
+				$filters.find('.dwm-picker-filter-btn[data-filter="' + currentFilter + '"]').addClass('is-active');
+
+				if ( !selectable.length ) {
 					$list.html('<p style="color:#6b7280;font-size:13px;"><?php echo esc_js( __( 'No widgets found.', 'dashboard-widget-manager' ) ); ?></p>');
 					return;
 				}
-				$.each(widgets, function(i, w) {
-					var statusClass  = w.enabled ? 'active' : 'draft';
-					var statusLabel  = w.enabled ? '<?php echo esc_js( __( 'Active', 'dashboard-widget-manager' ) ); ?>' : '<?php echo esc_js( __( 'Draft', 'dashboard-widget-manager' ) ); ?>';
+
+				$.each(selectable, function(i, w) {
+					var statusClass = w.enabled ? 'active' : 'draft';
+					var statusLabel = w.enabled ? '<?php echo esc_js( __( 'Active', 'dashboard-widget-manager' ) ); ?>' : '<?php echo esc_js( __( 'Draft', 'dashboard-widget-manager' ) ); ?>';
 					var $item = $(
-						'<button type="button" class="dwm-widget-list-item" data-id="' + w.id + '" data-enabled="' + (w.enabled ? '1' : '0') + '">' +
+						'<button type="button" class="dwm-widget-list-item" data-id="' + w.id + '" data-enabled="' + (w.enabled ? '1' : '0') + '" data-status="' + statusClass + '">' +
 							'<div>' +
 								'<div class="dwm-widget-item-name">' + $('<span>').text(w.name).html() + '</div>' +
 								( w.desc ? '<div class="dwm-widget-item-desc">' + $('<span>').text(w.desc).html() + '</div>' : '' ) +
@@ -493,6 +702,27 @@ class DWM_Admin {
 					);
 					$list.append($item);
 				});
+
+				applyFilters();
+			}
+
+			function applyFilters() {
+				var search  = ($('#dwm-picker-search').val() || '').toLowerCase().trim();
+				var visible = 0;
+
+				$('#dwm-picker-widget-list .dwm-widget-list-item').each(function() {
+					var $item       = $(this);
+					var itemStatus  = $item.data('status');
+					var name        = $item.find('.dwm-widget-item-name').text().toLowerCase();
+					var desc        = $item.find('.dwm-widget-item-desc').text().toLowerCase();
+					var matchFilter = ( currentFilter === 'all' ) || ( itemStatus === currentFilter );
+					var matchSearch = !search || name.indexOf(search) !== -1 || desc.indexOf(search) !== -1;
+
+					$item.toggle(matchFilter && matchSearch);
+					if ( matchFilter && matchSearch ) { visible++; }
+				});
+
+				$('#dwm-picker-no-results').toggle(visible === 0 && $('#dwm-picker-widget-list .dwm-widget-list-item').length > 0);
 			}
 
 			// Open picker button.
@@ -504,10 +734,27 @@ class DWM_Admin {
 				if (e.key === 'Escape') { closePicker(); }
 			});
 
-			// Step 1 → Step 2 (select existing).
+			// Step 1 → Step 2: reset filter/search to defaults.
 			$(document).on('click', '#dwm-picker-show-list', function() {
+				currentFilter = 'active';
+				$('#dwm-picker-status-filters .dwm-picker-filter-btn').removeClass('is-active');
+				$('#dwm-picker-status-filters .dwm-picker-filter-btn[data-filter="active"]').addClass('is-active');
+				$('#dwm-picker-search').val('');
 				buildWidgetList();
 				showStep(2);
+			});
+
+			// Filter button click.
+			$(document).on('click', '.dwm-picker-filter-btn', function() {
+				currentFilter = $(this).data('filter');
+				$('#dwm-picker-status-filters .dwm-picker-filter-btn').removeClass('is-active');
+				$(this).addClass('is-active');
+				applyFilters();
+			});
+
+			// Search input.
+			$(document).on('input', '#dwm-picker-search', function() {
+				applyFilters();
 			});
 
 			// Step 2 → Step 1 (back).
@@ -582,28 +829,6 @@ class DWM_Admin {
 	}
 
 	/**
-	 * Enqueue Chart.js on the WordPress dashboard page.
-	 *
-	 * Hooked to admin_enqueue_scripts so Chart.js is available
-	 * for any widgets that use chart rendering.
-	 *
-	 * @param string $hook Current admin page hook.
-	 */
-	public function enqueue_chartjs( $hook ) {
-		if ( 'index.php' !== $hook && ! $this->is_plugin_page( $hook ) ) {
-			return;
-		}
-
-		wp_enqueue_script(
-			'dwm-chartjs',
-			DWM_PLUGIN_URL . 'assets/js/minimized/vendors/chart.min.js',
-			array(),
-			DWM_VERSION,
-			true
-		);
-	}
-
-	/**
 	 * Enqueue admin scripts.
 	 *
 	 * @param string $hook Current admin page hook.
@@ -614,10 +839,28 @@ class DWM_Admin {
 			return;
 		}
 
+		// Chart widgets render on the WP Dashboard (index.php). Ensure Chart.js is available there.
+		if ( 'index.php' === $hook ) {
+			wp_enqueue_script(
+				'dwm-chartjs',
+				DWM_PLUGIN_URL . 'assets/js/components/vendors/chart.min.js',
+				array(),
+				DWM_VERSION,
+				true
+			);
+			wp_enqueue_script(
+				'dwm-wp-dashboard',
+				DWM_PLUGIN_URL . 'assets/minimized/js/wp-dashboard.min.js',
+				array( 'jquery', 'dwm-admin' ),
+				DWM_VERSION,
+				true
+			);
+		}
+
 		// Base admin script.
 		wp_enqueue_script(
 			'dwm-admin',
-			DWM_PLUGIN_URL . 'assets/js/minimized/admin/admin.min.js',
+			DWM_PLUGIN_URL . 'assets/minimized/js/admin.min.js',
 			array( 'jquery' ),
 			DWM_VERSION,
 			true
@@ -660,10 +903,30 @@ class DWM_Admin {
 		}
 
 		// Page-specific scripts.
+		if ( 'widget-manager_page_dwm-settings' === $hook ) {
+			wp_enqueue_script(
+				'dwm-settings',
+				DWM_PLUGIN_URL . 'assets/minimized/js/settings.min.js',
+				array( 'jquery', 'dwm-admin' ),
+				DWM_VERSION,
+				true
+			);
+		}
+
+		if ( 'widget-manager_page_dwm-tools' === $hook ) {
+			wp_enqueue_script(
+				'dwm-tools',
+				DWM_PLUGIN_URL . 'assets/minimized/js/tools.min.js',
+				array( 'jquery', 'dwm-admin' ),
+				DWM_VERSION,
+				true
+			);
+		}
+
 		if ( strpos( $hook, 'dashboard-widget-manager' ) !== false && strpos( $hook, 'dwm-' ) === false ) {
 			wp_enqueue_script(
-				'dwm-widget-editor',
-				DWM_PLUGIN_URL . 'assets/js/minimized/admin/widget-editor.min.js',
+				'dwm-dashboard',
+				DWM_PLUGIN_URL . 'assets/minimized/js/dashboard.min.js',
 				array( 'jquery', 'dwm-admin', 'wp-codemirror' ),
 				DWM_VERSION,
 				true
@@ -684,6 +947,8 @@ class DWM_Admin {
 		$plugin_pages = array(
 			'toplevel_page_dashboard-widget-manager',
 			'widget-manager_page_dwm-settings',
+			'widget-manager_page_dwm-tools',
+			'index.php',
 		);
 
 		return in_array( $hook, $plugin_pages, true );

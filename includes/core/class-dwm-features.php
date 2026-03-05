@@ -27,7 +27,7 @@ class DWM_Features {
 			return self::$data_cache;
 		}
 
-		$file = DWM_PLUGIN_DIR . 'data/features.php';
+		$file = DWM_PLUGIN_DIR . 'includes/admin/data/features.php';
 		if ( file_exists( $file ) ) {
 			$data = include $file;
 			if ( is_array( $data ) ) {
@@ -45,7 +45,8 @@ class DWM_Features {
 
 		$data = self::load_data_file();
 		if ( ! empty( $data['all_features'] ) ) {
-			self::$features_cache = self::normalize_features( $data['all_features'] );
+			$features = self::normalize_features( $data['all_features'] );
+			self::$features_cache = self::sort_by_category_order( $features );
 			return self::$features_cache;
 		}
 
@@ -148,6 +149,32 @@ class DWM_Features {
 		self::$integrations_cache = null;
 		self::$categories_cache   = null;
 		self::$data_cache         = null;
+	}
+
+	public static function has_divider_before( string $category_name ): bool {
+		$categories = self::get_categories();
+		return ! empty( $categories[ $category_name ]['divider_before'] );
+	}
+
+	private static function sort_by_category_order( array $all_features ): array {
+		$categories    = self::get_categories();
+		$category_keys = array_keys( $categories );
+
+		uksort( $all_features, function ( $a, $b ) use ( $category_keys ) {
+			$pos_a = array_search( $a, $category_keys, true );
+			$pos_b = array_search( $b, $category_keys, true );
+
+			if ( false === $pos_a ) {
+				$pos_a = PHP_INT_MAX;
+			}
+			if ( false === $pos_b ) {
+				$pos_b = PHP_INT_MAX;
+			}
+
+			return $pos_a <=> $pos_b;
+		} );
+
+		return $all_features;
 	}
 
 	private static function normalize_features( array $all_features ): array {

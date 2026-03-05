@@ -67,6 +67,16 @@ class DWM_Admin_Menu {
 			array( $this, 'render_settings_page' )
 		);
 
+		// Tools submenu.
+		add_submenu_page(
+			'dashboard-widget-manager',
+			__( 'Tools', 'dashboard-widget-manager' ),
+			__( 'Tools', 'dashboard-widget-manager' ),
+			self::REQUIRED_CAP,
+			'dwm-tools',
+			array( $this, 'render_tools_page' )
+		);
+
 		// Pro upgrade / add license key submenu.
 		$pro_config = self::get_pro_menu_config();
 		if ( $pro_config ) {
@@ -146,6 +156,84 @@ class DWM_Admin_Menu {
 	}
 
 	/**
+	 * Add action links to the plugin's row on the Plugins admin page.
+	 *
+	 * Reads submenu items dynamically so the links stay in sync with the
+	 * registered admin menu. The Pro upgrade / license link is appended last
+	 * (before the WP-provided Deactivate link) with the same gold colour used
+	 * in the admin sidebar.
+	 *
+	 * @param array $links Existing action links (contains Deactivate).
+	 * @return array
+	 */
+	public function add_action_links( array $links ): array {
+		global $submenu;
+
+		$new_links  = [];
+		$parent     = 'dashboard-widget-manager';
+		$pro_slug   = self::PRO_MENU_SLUG;
+		$pro_config = self::get_pro_menu_config();
+
+		// Build links from the live submenu — same order as the WP admin sidebar.
+		if ( ! empty( $submenu[ $parent ] ) ) {
+			foreach ( $submenu[ $parent ] as $item ) {
+				$item_slug  = $item[2] ?? '';
+				$item_label = strip_tags( $item[0] ?? '' );
+
+				// Skip empty or the Pro placeholder page.
+				if ( ! $item_slug || ! $item_label || $item_slug === $pro_slug ) {
+					continue;
+				}
+
+				$new_links[] = sprintf(
+					'<a href="%s">%s</a>',
+					esc_url( admin_url( 'admin.php?page=' . $item_slug ) ),
+					esc_html( $item_label )
+				);
+			}
+		}
+
+		// Pro upgrade / license link — bold, gold to match the admin sidebar colour.
+		if ( $pro_config ) {
+			$link_classes   = [ 'dwm-pro-action-link' ];
+			$link_classes[] = 'add_license' === $pro_config['type'] ? 'dwm-add-api-key-button' : 'dwm-upgrade-button';
+
+			$data_attrs = '';
+			if ( ! empty( $pro_config['scroll_to'] ) ) {
+				$data_attrs .= ' data-scroll-to="' . esc_attr( $pro_config['scroll_to'] ) . '"';
+			}
+			if ( ! empty( $pro_config['focus_field'] ) ) {
+				$data_attrs .= ' data-focus-field="' . esc_attr( $pro_config['focus_field'] ) . '"';
+			}
+
+			$pro_label = 'add_license' === $pro_config['type']
+				? __( 'Add License', 'dashboard-widget-manager' )
+				: $pro_config['label'];
+
+			$new_links[] = sprintf(
+				'<a href="%s" class="%s" style="color:#f0b849;font-weight:bold;"%s>%s</a>',
+				esc_url( $pro_config['target_url'] ),
+				esc_attr( implode( ' ', $link_classes ) ),
+				$data_attrs,
+				esc_html( $pro_label )
+			);
+		}
+
+		return array_merge( $new_links, $links );
+	}
+
+	/**
+	 * Hide Screen Options tab on DWM plugin pages.
+	 *
+	 * @return void
+	 */
+	public static function maybe_hide_screen_options(): void {
+		if ( self::is_plugin_page() ) {
+			add_filter( 'screen_options_show_screen', '__return_false' );
+		}
+	}
+
+	/**
 	 * Redirect the Pro menu entry to the configured target URL.
 	 *
 	 * @return void
@@ -179,5 +267,17 @@ class DWM_Admin_Menu {
 
 		// Load template.
 		require_once DWM_PLUGIN_DIR . 'templates/admin/settings.php';
+	}
+
+	/**
+	 * Render tools page.
+	 */
+	public function render_tools_page() {
+		if ( ! current_user_can( self::REQUIRED_CAP ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'dashboard-widget-manager' ) );
+		}
+
+		// Load template.
+		require_once DWM_PLUGIN_DIR . 'templates/admin/tools.php';
 	}
 }

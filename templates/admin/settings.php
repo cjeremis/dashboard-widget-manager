@@ -20,7 +20,7 @@ $settings = $data->get_settings();
 // Page wrapper configuration.
 $current_page       = 'dwm-settings';
 $header_title       = __( 'Settings', 'dashboard-widget-manager' );
-$header_description = __( 'Configure security settings for your dashboard widgets.', 'dashboard-widget-manager' );
+$header_description = __( 'Configure security and behavior controls including table restrictions, cache defaults, execution limits, notifications, and license settings.', 'dashboard-widget-manager' );
 $topbar_actions     = [];
 
 include __DIR__ . '/partials/page-wrapper-start.php';
@@ -64,10 +64,10 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 		<!-- Security -->
 		<div class="dwm-section">
 			<?php
-			$title             = __( 'Security', 'dashboard-widget-manager' );
+			$title             = __( 'Table Allow List', 'dashboard-widget-manager' );
 			$help_modal_target = 'dwm-docs-modal';
-			$help_icon_label   = __( 'View security settings help', 'dashboard-widget-manager' );
-			$attrs             = 'data-docs-page="settings-security"';
+			$help_icon_label   = __( 'Learn about the Table Allow List Setting', 'dashboard-widget-manager' );
+			$attrs             = 'data-docs-page="feature-table-allowlist"';
 			include __DIR__ . '/partials/section-header-with-actions.php';
 			unset( $title, $help_modal_target, $help_icon_label, $attrs, $actions_html );
 			?>
@@ -76,16 +76,14 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 				<div class="dwm-form-control">
 					<?php
 					global $wpdb;
-					$all_tables         = $wpdb->get_col( 'SHOW TABLES' );
+					$all_tables          = $wpdb->get_col( 'SHOW TABLES' );
 					sort( $all_tables );
-					$allowed_tables_raw = $settings['allowed_tables'];
-					if ( empty( $allowed_tables_raw ) ) {
-						$checked_tables = $all_tables;
-					} else {
-						$checked_tables = array_filter( array_map( 'trim', explode( "\n", $allowed_tables_raw ) ) );
-					}
+					$excluded_tables_raw = $settings['excluded_tables'] ?? '';
+					$excluded_tables_arr = empty( $excluded_tables_raw )
+						? array()
+						: array_filter( array_map( 'trim', explode( "\n", $excluded_tables_raw ) ) );
 					?>
-					<input type="hidden" name="settings[allowed_tables]" id="dwm-allowed-tables-value" value="<?php echo esc_attr( $allowed_tables_raw ); ?>">
+					<input type="hidden" name="settings[excluded_tables]" id="dwm-excluded-tables-value" value="<?php echo esc_attr( $excluded_tables_raw ); ?>">
 					<div class="dwm-table-controls">
 						<a href="#" id="dwm-select-all-tables"><?php esc_html_e( 'Select All', 'dashboard-widget-manager' ); ?></a>
 						<span>/</span>
@@ -95,7 +93,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 						<?php foreach ( $all_tables as $table ) : ?>
 							<label class="dwm-table-checkbox-label" title="<?php echo esc_attr( $table ); ?>">
 								<input type="checkbox" class="dwm-table-checkbox" value="<?php echo esc_attr( $table ); ?>"
-									<?php checked( in_array( $table, $checked_tables, true ) ); ?>>
+									<?php checked( ! in_array( $table, $excluded_tables_arr, true ) ); ?>>
 								<?php echo esc_html( $table ); ?>
 							</label>
 						<?php endforeach; ?>
@@ -110,402 +108,135 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 			</div>
 		</div>
 
-	</form>
+		<!-- Dashboard Overrides -->
+		<div class="dwm-section">
+			<?php
+			$title             = __( 'Dashboard Overrides', 'dashboard-widget-manager' );
+			$help_modal_target = 'dwm-docs-modal';
+			$help_icon_label   = __( 'Learn about Dashboard Overrides', 'dashboard-widget-manager' );
+			$attrs             = 'data-docs-page="category-overview-settings"';
+			include __DIR__ . '/partials/section-header-with-actions.php';
+			unset( $title, $help_modal_target, $help_icon_label, $attrs, $actions_html );
+			?>
 
-	<!-- Export Data -->
-	<div class="dwm-section">
-		<?php
-		$title             = __( 'Export Data', 'dashboard-widget-manager' );
-		$help_modal_target = 'dwm-docs-modal';
-		$help_icon_label   = __( 'View export data help', 'dashboard-widget-manager' );
-		$attrs             = 'data-docs-page="settings-export"';
-		include __DIR__ . '/partials/section-header-with-actions.php';
-		unset( $title, $help_modal_target, $help_icon_label, $attrs, $actions_html );
-		?>
-
-		<?php
-		$all_widgets     = $data->get_widgets();
-		$has_export_data = ! empty( $all_widgets );
-		?>
-
-		<?php if ( $has_export_data ) : ?>
-			<div class="dwm-export-actions">
-				<button type="button" id="dwm-export-button" class="dwm-button dwm-button-primary">
-					<span class="dashicons dashicons-download"></span>
-					<?php esc_html_e( 'Download JSON File', 'dashboard-widget-manager' ); ?>
-				</button>
-				<button type="button" id="dwm-view-data" class="dwm-button dwm-button-secondary">
-					<span class="dashicons dashicons-visibility"></span>
-					<?php esc_html_e( 'View Data', 'dashboard-widget-manager' ); ?>
-				</button>
-			</div>
-		<?php else : ?>
-			<div class="dwm-empty-state">
-				<span class="dashicons dashicons-download" style="font-size:20px;width:20px;height:20px;color:#c3c4c7;margin-bottom:4px;display:block;"></span>
-				<p><strong><?php esc_html_e( 'No Data to Export', 'dashboard-widget-manager' ); ?></strong></p>
-				<p><?php esc_html_e( 'There are no widgets available to export.', 'dashboard-widget-manager' ); ?></p>
-			</div>
-		<?php endif; ?>
-	</div>
-
-	<!-- Import Data -->
-	<div class="dwm-section">
-		<?php
-		$title             = __( 'Import Data', 'dashboard-widget-manager' );
-		$help_modal_target = 'dwm-docs-modal';
-		$help_icon_label   = __( 'View import data help', 'dashboard-widget-manager' );
-		$attrs             = 'data-docs-page="settings-import"';
-		include __DIR__ . '/partials/section-header-with-actions.php';
-		unset( $title, $help_modal_target, $help_icon_label, $attrs, $actions_html );
-		?>
-
-		<form method="post" enctype="multipart/form-data" action="#" class="dwm-import-form" id="dwm-import-form">
-			<?php wp_nonce_field( 'dwm_admin_nonce', 'nonce' ); ?>
-
-			<div class="dwm-import-settings-row">
-				<!-- File Input Column -->
-				<div class="dwm-form-group dwm-import-setting">
-					<label for="dwm-import-file">
-						<?php esc_html_e( 'File', 'dashboard-widget-manager' ); ?>
-						<span style="color: var(--dwm-danger);">*</span>
-					</label>
-					<?php
-					$input_id         = 'dwm-import-file';
-					$input_name       = 'file';
-					$wrapper_id       = 'dwm-file-input-wrapper';
-					$selected_id      = 'dwm-file-selected';
-					$file_name_id     = 'dwm-file-name';
-					$file_size_id     = 'dwm-file-size';
-					$remove_button_id = 'dwm-file-remove';
-					$label_text       = __( 'Drop or Choose JSON File', 'dashboard-widget-manager' );
-					include DWM_PLUGIN_DIR . 'templates/admin/partials/file-input-wrapper.php';
-					unset( $input_id, $input_name, $wrapper_id, $selected_id, $file_name_id, $file_size_id, $remove_button_id, $label_text );
-					?>
-				</div>
-
-				<!-- Import Mode Column -->
-				<div class="dwm-form-group dwm-import-setting">
-					<label for="dwm-import-mode">
-						<?php esc_html_e( 'Mode', 'dashboard-widget-manager' ); ?>
-					</label>
-					<input type="hidden" name="import[mode]" value="replace" />
-					<select id="dwm-import-mode" class="dwm-select" disabled>
-						<option value="replace" selected><?php esc_html_e( 'Replace all data', 'dashboard-widget-manager' ); ?></option>
-					</select>
-				</div>
-
-				<!-- Backup Column -->
-				<div class="dwm-form-group dwm-import-setting">
-					<label class="dwm-import-backup-label" for="dwm-import-backup">
-						<?php esc_html_e( 'Backup', 'dashboard-widget-manager' ); ?>
-						<span class="dwm-pro-badge dwm-pro-badge-inline"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
-					</label>
-					<label class="dwm-toggle-switch dwm-toggle-disabled">
-						<input type="checkbox" name="import[backup]" id="dwm-import-backup" value="1" disabled="disabled">
+			<div class="dwm-form-row dwm-form-row--toggles">
+				<div class="dwm-form-group dwm-form-group--toggle">
+					<label class="dwm-toggle" for="dwm-hide-help-dropdown">
+						<input type="checkbox" id="dwm-hide-help-dropdown" name="settings[hide_help_dropdown]" value="1" data-autosave="true" <?php checked( ! empty( $settings['hide_help_dropdown'] ) ); ?>>
 						<span class="dwm-toggle-slider"></span>
 					</label>
+					<div class="dwm-form-group-info">
+						<span class="dwm-form-label"><?php esc_html_e( 'Hide Help Dropdown', 'dashboard-widget-manager' ); ?></span>
+					</div>
+				</div>
+
+				<div class="dwm-form-group dwm-form-group--toggle">
+					<label class="dwm-toggle" for="dwm-hide-screen-options">
+						<input type="checkbox" id="dwm-hide-screen-options" name="settings[hide_screen_options]" value="1" data-autosave="true" <?php checked( ! empty( $settings['hide_screen_options'] ) ); ?>>
+						<span class="dwm-toggle-slider"></span>
+					</label>
+					<div class="dwm-form-group-info">
+						<span class="dwm-form-label"><?php esc_html_e( 'Hide Screen Options', 'dashboard-widget-manager' ); ?></span>
+					</div>
 				</div>
 			</div>
 
-			<div class="dwm-import-actions" id="dwm-import-actions" style="display: none;">
-				<button type="button" class="dwm-button dwm-button-primary" id="dwm-import-button" disabled>
-					<?php esc_html_e( 'Import Data', 'dashboard-widget-manager' ); ?>
-				</button>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-settings' ) ); ?>" class="dwm-button dwm-button-secondary">
-					<?php esc_html_e( 'Cancel', 'dashboard-widget-manager' ); ?>
-				</a>
-			</div>
-		</form>
-
-		<!-- Import Preview (shown after file selection) -->
-		<div id="dwm-import-preview" class="dwm-import-preview" style="display: none;">
-			<h3><?php esc_html_e( 'Import Preview', 'dashboard-widget-manager' ); ?></h3>
-			<pre id="dwm-preview-content" class="dwm-json-preview"><code></code></pre>
-		</div>
-	</div>
-
-	<!-- Demo Data -->
-	<div class="dwm-section">
-		<?php
-		$title             = __( 'Demo Data', 'dashboard-widget-manager' );
-		$help_modal_target = 'dwm-docs-modal';
-		$help_icon_label   = __( 'View demo data help', 'dashboard-widget-manager' );
-		$attrs             = 'data-docs-page="settings-demo-data"';
-		include __DIR__ . '/partials/section-header-with-actions.php';
-		unset( $title, $help_modal_target, $help_icon_label, $attrs, $actions_html );
-
-		$demo_data_handler = DWM_Demo_Data::get_instance();
-		$has_demo_file     = $demo_data_handler->demo_data_exists();
-		$has_demo_widgets  = $data->has_demo_widgets();
-		?>
-
-		<?php if ( $has_demo_file ) : ?>
-			<div class="dwm-demo-actions">
-				<button type="button" id="dwm-open-import-demo-modal" class="dwm-button dwm-button-primary">
-					<span class="dashicons dashicons-database-import"></span>
-					<?php esc_html_e( 'Import Demo Widgets', 'dashboard-widget-manager' ); ?>
-				</button>
-				<?php if ( $has_demo_widgets ) : ?>
-					<button type="button" id="dwm-delete-demo-data" class="dwm-button dwm-button-danger">
-						<span class="dashicons dashicons-trash"></span>
-						<?php esc_html_e( 'Delete Demo Widgets', 'dashboard-widget-manager' ); ?>
-					</button>
-				<?php endif; ?>
-			</div>
-			<?php if ( $has_demo_widgets ) : ?>
-				<p class="dwm-demo-active-notice">
-					<span class="dashicons dashicons-yes-alt" style="color:#00a32a;"></span>
-					<?php esc_html_e( 'Demo widgets are currently installed on your dashboard.', 'dashboard-widget-manager' ); ?>
-				</p>
-				<div class="dwm-export-actions">
-					<button type="button" id="dwm-demo-export-button" class="dwm-button dwm-button-primary">
-						<span class="dashicons dashicons-download"></span>
-						<?php esc_html_e( 'Download JSON File', 'dashboard-widget-manager' ); ?>
-					</button>
-					<button type="button" id="dwm-demo-view-data" class="dwm-button dwm-button-secondary">
-						<span class="dashicons dashicons-visibility"></span>
-						<?php esc_html_e( 'View Data', 'dashboard-widget-manager' ); ?>
-					</button>
+			<div class="dwm-form-group">
+				<p class="dwm-form-label"><?php esc_html_e( 'Hide Default Widgets', 'dashboard-widget-manager' ); ?></p>
+				<div class="dwm-form-control">
+					<?php
+					$default_wp_widgets = array(
+						'welcome-panel'         => __( 'Welcome Panel', 'dashboard-widget-manager' ),
+						'dashboard_activity'    => __( 'Activity', 'dashboard-widget-manager' ),
+						'dashboard_right_now'   => __( 'At a Glance', 'dashboard-widget-manager' ),
+						'dashboard_quick_press' => __( 'Quick Draft', 'dashboard-widget-manager' ),
+						'dashboard_site_health' => __( 'Site Health Status', 'dashboard-widget-manager' ),
+						'dashboard_primary'     => __( 'Events and News', 'dashboard-widget-manager' ),
+					);
+					$hidden_widgets_raw = $settings['hidden_dashboard_widgets'] ?? '';
+					$hidden_widgets_arr = empty( $hidden_widgets_raw )
+						? array()
+						: array_filter( array_map( 'trim', explode( "\n", $hidden_widgets_raw ) ) );
+					?>
+					<input type="hidden" name="settings[hidden_dashboard_widgets]" id="dwm-hidden-widgets-value" value="<?php echo esc_attr( $hidden_widgets_raw ); ?>">
+					<div class="dwm-table-controls">
+						<a href="#" id="dwm-select-all-widgets"><?php esc_html_e( 'Select All', 'dashboard-widget-manager' ); ?></a>
+						<span>/</span>
+						<a href="#" id="dwm-deselect-all-widgets"><?php esc_html_e( 'Deselect All', 'dashboard-widget-manager' ); ?></a>
+					</div>
+					<div class="dwm-tables-grid">
+						<?php foreach ( $default_wp_widgets as $widget_id => $widget_label ) : ?>
+							<label class="dwm-table-checkbox-label" title="<?php echo esc_attr( $widget_label ); ?>">
+								<input type="checkbox" class="dwm-widget-hide-checkbox" value="<?php echo esc_attr( $widget_id ); ?>"
+									<?php checked( in_array( $widget_id, $hidden_widgets_arr, true ) ); ?>>
+								<?php echo esc_html( $widget_label ); ?>
+							</label>
+						<?php endforeach; ?>
+					</div>
 				</div>
-			<?php endif; ?>
-		<?php else : ?>
-			<div class="dwm-empty-state">
-				<span class="dashicons dashicons-database" style="font-size:20px;width:20px;height:20px;color:#c3c4c7;margin-bottom:4px;display:block;"></span>
-				<p><strong><?php esc_html_e( 'Demo data file not found.', 'dashboard-widget-manager' ); ?></strong></p>
 			</div>
-		<?php endif; ?>
-	</div>
 
-	<!-- Reset Data -->
-	<div class="dwm-section">
-		<?php
-		$title             = __( 'Reset Data', 'dashboard-widget-manager' );
-		$help_modal_target = 'dwm-docs-modal';
-		$help_icon_label   = __( 'View reset data help', 'dashboard-widget-manager' );
-		$attrs             = 'data-docs-page="settings-reset"';
-		include __DIR__ . '/partials/section-header-with-actions.php';
-		unset( $title, $help_modal_target, $help_icon_label, $attrs, $actions_html );
-		?>
-
-		<div class="dwm-reset-row">
-			<button type="button" id="dwm-open-reset-modal" class="dwm-button dwm-button-danger"<?php echo empty( $all_widgets ) ? ' disabled' : ''; ?>>
-				<span class="dashicons dashicons-trash"></span>
-				<?php esc_html_e( 'Reset Data', 'dashboard-widget-manager' ); ?>
-			</button>
-		</div>
-	</div>
-
-</div>
-
-<?php
-// Export Options Modal
-ob_start();
-?>
-<div class="dwm-export-options">
-	<p class="dwm-export-intro">
-		<?php esc_html_e( 'Select which data to include in your export file.', 'dashboard-widget-manager' ); ?>
-	</p>
-
-	<div class="dwm-export-toggle-group">
-		<div class="dwm-export-toggle-row">
-			<label class="dwm-toggle-switch">
-				<input type="checkbox" id="dwm-export-widgets" checked />
-				<span class="dwm-toggle-slider"></span>
-			</label>
-			<div class="dwm-export-toggle-content">
-				<span class="dwm-export-toggle-label"><?php esc_html_e( 'Widgets', 'dashboard-widget-manager' ); ?></span>
-				<span class="dwm-export-toggle-desc"><?php esc_html_e( 'Include all widget configurations', 'dashboard-widget-manager' ); ?></span>
+			<div class="dwm-section-actions">
+				<button type="submit" class="dwm-button dwm-button-primary">
+					<?php esc_html_e( 'Save Overrides', 'dashboard-widget-manager' ); ?>
+				</button>
 			</div>
 		</div>
 
-		<div class="dwm-export-toggle-row">
-			<label class="dwm-toggle-switch">
-				<input type="checkbox" id="dwm-export-settings" checked />
-				<span class="dwm-toggle-slider"></span>
-			</label>
-			<div class="dwm-export-toggle-content">
-				<span class="dwm-export-toggle-label"><?php esc_html_e( 'Settings', 'dashboard-widget-manager' ); ?></span>
-				<span class="dwm-export-toggle-desc"><?php esc_html_e( 'Include global plugin configuration', 'dashboard-widget-manager' ); ?></span>
+		<!-- Support & Privacy -->
+		<div class="dwm-section">
+			<?php
+			$title             = __( 'Support & Privacy', 'dashboard-widget-manager' );
+			$help_modal_target = 'dwm-docs-modal';
+			$help_icon_label   = __( 'Learn about support data sharing and legal disclosures', 'dashboard-widget-manager' );
+			$attrs             = 'data-docs-page="category-overview-support"';
+			include __DIR__ . '/partials/section-header-with-actions.php';
+			unset( $title, $help_modal_target, $help_icon_label, $attrs, $actions_html );
+
+			$privacy_page_id = (int) get_option( 'tda_shared_privacy_page_id' );
+			$terms_page_id   = (int) get_option( 'tda_shared_terms_page_id' );
+			$privacy_url     = $privacy_page_id ? get_permalink( $privacy_page_id ) : 'https://topdevamerica.com/privacy-policy';
+			$terms_url       = $terms_page_id ? get_permalink( $terms_page_id ) : 'https://topdevamerica.com/terms';
+			?>
+
+			<div class="dwm-form-row dwm-form-row--toggles">
+				<div class="dwm-form-group dwm-form-group--toggle">
+					<label class="dwm-toggle" for="dwm-support-data-sharing-opt-in">
+						<input
+							type="checkbox"
+							id="dwm-support-data-sharing-opt-in"
+							name="settings[support_data_sharing_opt_in]"
+							value="1"
+							data-autosave="true"
+							<?php checked( ! empty( $settings['support_data_sharing_opt_in'] ) ); ?>
+						>
+						<span class="dwm-toggle-slider"></span>
+					</label>
+					<div class="dwm-form-group-info">
+						<span class="dwm-form-label"><?php esc_html_e( 'Live Support Reply Sync', 'dashboard-widget-manager' ); ?></span>
+						<p class="description">
+							<?php esc_html_e( 'When enabled, this plugin contacts TopDevAmerica servers to sync support reply notifications for your account. Data transmitted: your account email address and site URL. Disabled by default.', 'dashboard-widget-manager' ); ?>
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="dwm-info-box dwm-info-box--info">
+				<span class="dashicons dashicons-privacy"></span>
+				<div>
+					<strong><?php esc_html_e( 'Legal Disclosures', 'dashboard-widget-manager' ); ?></strong>
+					<p>
+						<?php esc_html_e( 'By using support and license services, you agree to the terms and privacy disclosures below.', 'dashboard-widget-manager' ); ?>
+						<a href="<?php echo esc_url( $privacy_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Privacy Policy', 'dashboard-widget-manager' ); ?></a>
+						|
+						<a href="<?php echo esc_url( $terms_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Terms of Service', 'dashboard-widget-manager' ); ?></a>
+					</p>
+				</div>
 			</div>
 		</div>
-	</div>
 
-	<p class="dwm-export-hint">
-		<span class="dashicons dashicons-info"></span>
-		<?php esc_html_e( 'Exports are JSON only and can be imported back into Dashboard Widget Manager.', 'dashboard-widget-manager' ); ?>
-	</p>
+	</form>
+
 </div>
-<?php
-$export_options_body = ob_get_clean();
-
-ob_start();
-?>
-<div style="display: flex; justify-content: flex-end; gap: var(--dwm-spacing-sm);">
-	<button type="button" id="dwm-export-download-btn" class="dwm-button dwm-button-primary">
-		<span class="dashicons dashicons-download"></span>
-		<?php esc_html_e( 'Download JSON', 'dashboard-widget-manager' ); ?>
-	</button>
-</div>
-<?php
-$export_options_footer = ob_get_clean();
-$modal                 = [
-	'id'          => 'dwm-export-options-modal',
-	'title_html'  => '<span class="dashicons dashicons-upload"></span>' . esc_html__( 'Export Data', 'dashboard-widget-manager' ),
-	'body_html'   => $export_options_body,
-	'footer_html' => $export_options_footer,
-	'size_class'  => 'dwm-modal-md',
-];
-include DWM_PLUGIN_DIR . 'templates/admin/partials/modal.php';
-unset( $modal, $export_options_body, $export_options_footer );
-?>
-
-<?php
-// View Data Modal
-ob_start();
-?>
-<textarea id="dwm-export-json-preview" class="dwm-json-textarea" readonly></textarea>
-<?php
-$view_body = ob_get_clean();
-
-ob_start();
-?>
-<div class="dwm-view-data-footer">
-	<div class="dwm-view-data-toggles">
-		<div class="dwm-view-toggle-item">
-			<label class="dwm-toggle-switch dwm-toggle-switch--sm">
-				<input type="checkbox" id="dwm-view-toggle-widgets" class="dwm-view-toggle" data-key="widgets" checked />
-				<span class="dwm-toggle-slider"></span>
-			</label>
-			<span class="dwm-view-toggle-label"><?php esc_html_e( 'Widgets', 'dashboard-widget-manager' ); ?></span>
-		</div>
-		<div class="dwm-view-toggle-item">
-			<label class="dwm-toggle-switch dwm-toggle-switch--sm">
-				<input type="checkbox" id="dwm-view-toggle-settings" class="dwm-view-toggle" data-key="settings" checked />
-				<span class="dwm-toggle-slider"></span>
-			</label>
-			<span class="dwm-view-toggle-label"><?php esc_html_e( 'Settings', 'dashboard-widget-manager' ); ?></span>
-		</div>
-	</div>
-	<div class="dwm-view-data-actions">
-		<button type="button" id="dwm-modal-copy-json" class="dwm-button dwm-button-secondary">
-			<span class="dashicons dashicons-clipboard"></span>
-			<?php esc_html_e( 'Copy to Clipboard', 'dashboard-widget-manager' ); ?>
-		</button>
-		<button type="button" id="dwm-modal-download-json" class="dwm-button dwm-button-primary">
-			<span class="dashicons dashicons-download"></span>
-			<?php esc_html_e( 'Download JSON', 'dashboard-widget-manager' ); ?>
-		</button>
-	</div>
-</div>
-<?php
-$view_footer = ob_get_clean();
-$modal       = [
-	'id'          => 'dwm-view-data-modal',
-	'title_html'  => '<span class="dashicons dashicons-visibility"></span>' . esc_html__( 'View Data', 'dashboard-widget-manager' ),
-	'body_html'   => $view_body,
-	'footer_html' => $view_footer,
-	'size_class'  => 'dwm-modal-xl',
-];
-include DWM_PLUGIN_DIR . 'templates/admin/partials/modal.php';
-unset( $modal, $view_body, $view_footer );
-?>
-
-<?php
-// Reset Data Modal
-ob_start();
-?>
-<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="dwm-reset-data-form">
-	<?php wp_nonce_field( 'dwm_admin_nonce', 'nonce' ); ?>
-	<input type="hidden" name="action" value="dwm_reset_data" />
-</form>
-<div class="dwm-reset-options">
-	<p class="dwm-reset-intro"><?php esc_html_e( 'Select which data to permanently delete.', 'dashboard-widget-manager' ); ?></p>
-
-	<div class="dwm-reset-warning">
-		<span class="dashicons dashicons-warning"></span>
-		<div>
-			<p class="dwm-reset-warning-title"><?php esc_html_e( 'Warning: This action cannot be undone', 'dashboard-widget-manager' ); ?></p>
-			<p class="dwm-reset-warning-body"><?php esc_html_e( 'Reset removes data immediately. Export first if you may need it later.', 'dashboard-widget-manager' ); ?></p>
-		</div>
-	</div>
-
-	<div class="dwm-reset-toggle-group">
-		<div class="dwm-reset-toggle-row">
-			<div class="dwm-reset-toggle-content">
-				<span class="dwm-reset-toggle-label"><?php esc_html_e( 'Widgets', 'dashboard-widget-manager' ); ?></span>
-				<span class="dwm-reset-toggle-desc"><?php esc_html_e( 'Delete all widget configurations', 'dashboard-widget-manager' ); ?></span>
-			</div>
-			<label class="dwm-toggle-switch">
-				<input type="checkbox" name="reset[widgets]" id="dwm-reset-widgets" value="1" form="dwm-reset-data-form" />
-				<span class="dwm-toggle-slider"></span>
-			</label>
-		</div>
-
-		<div class="dwm-reset-toggle-row">
-			<div class="dwm-reset-toggle-content">
-				<span class="dwm-reset-toggle-label"><?php esc_html_e( 'Settings', 'dashboard-widget-manager' ); ?></span>
-				<span class="dwm-reset-toggle-desc"><?php esc_html_e( 'Reset all plugin settings to defaults', 'dashboard-widget-manager' ); ?></span>
-			</div>
-			<label class="dwm-toggle-switch">
-				<input type="checkbox" name="reset[settings]" id="dwm-reset-settings-check" value="1" form="dwm-reset-data-form" />
-				<span class="dwm-toggle-slider"></span>
-			</label>
-		</div>
-	</div>
-</div>
-<?php
-$reset_body = ob_get_clean();
-
-ob_start();
-?>
-<div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: var(--dwm-spacing-sm);">
-	<button type="button" id="dwm-reset-export-first" class="dwm-button dwm-button-secondary">
-		<span class="dashicons dashicons-download"></span>
-		<?php esc_html_e( 'Export First', 'dashboard-widget-manager' ); ?>
-	</button>
-	<button type="button" id="dwm-reset-confirm-button" class="dwm-button dwm-button-danger">
-		<span class="dashicons dashicons-trash"></span>
-		<?php esc_html_e( 'Reset Data', 'dashboard-widget-manager' ); ?>
-	</button>
-</div>
-<?php
-$reset_footer = ob_get_clean();
-$modal        = [
-	'id'          => 'dwm-reset-data-modal',
-	'title_html'  => '<span class="dashicons dashicons-trash"></span>' . esc_html__( 'Reset Data', 'dashboard-widget-manager' ),
-	'body_html'   => $reset_body,
-	'footer_html' => $reset_footer,
-	'size_class'  => 'dwm-modal-md',
-];
-include DWM_PLUGIN_DIR . 'templates/admin/partials/modal.php';
-unset( $modal, $reset_body, $reset_footer );
-?>
-
-<?php
-// Import Demo Data Modal
-ob_start();
-include DWM_PLUGIN_DIR . 'templates/admin/modals/import-demo-modal.php';
-$import_demo_body = ob_get_clean();
-
-ob_start();
-?>
-<div style='display:flex;justify-content:flex-end;gap:var(--dwm-spacing-sm);'>
-	<button type='button' id='dwm-import-demo-confirm' class='dwm-button dwm-button-primary'>
-		<span class='dashicons dashicons-database-import'></span>
-		<?php esc_html_e( 'Import Demo Widgets', 'dashboard-widget-manager' ); ?>
-	</button>
-</div>
-<?php
-$import_demo_footer = ob_get_clean();
-$modal              = [
-	'id'          => 'dwm-import-demo-modal',
-	'title_html'  => '<span class="dashicons dashicons-database-import"></span>' . esc_html__( 'Import Demo Data', 'dashboard-widget-manager' ),
-	'body_html'   => $import_demo_body,
-	'footer_html' => $import_demo_footer,
-	'size_class'  => 'dwm-modal-md',
-];
-include DWM_PLUGIN_DIR . 'templates/admin/partials/modal.php';
-unset( $modal, $import_demo_body, $import_demo_footer );
-?>
 
 <?php include __DIR__ . '/partials/page-wrapper-end.php'; ?>

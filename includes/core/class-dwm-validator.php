@@ -81,6 +81,29 @@ class DWM_Validator {
 			$errors[] = __( 'Widget order must be a positive number.', 'dashboard-widget-manager' );
 		}
 
+		// Validate output_config.
+		if ( ! empty( $widget['output_config'] ) ) {
+			$output_errors = self::validate_output_config( $widget['output_config'] );
+			$errors        = array_merge( $errors, $output_errors );
+		}
+
+		// Validate builder_config selected columns.
+		if ( ! empty( $widget['builder_config'] ) ) {
+			$builder_config = is_string( $widget['builder_config'] )
+				? json_decode( $widget['builder_config'], true )
+				: $widget['builder_config'];
+
+			if ( is_array( $builder_config ) && ! empty( $builder_config['table'] ) ) {
+				$columns = isset( $builder_config['columns'] ) && is_array( $builder_config['columns'] )
+					? $builder_config['columns']
+					: array();
+
+				if ( empty( $columns ) ) {
+					$errors[] = __( 'At least one column must be selected in the visual builder.', 'dashboard-widget-manager' );
+				}
+			}
+		}
+
 		return $errors;
 	}
 
@@ -118,12 +141,9 @@ class DWM_Validator {
 			$errors[] = __( 'Multiple SQL statements are not allowed.', 'dashboard-widget-manager' );
 		}
 
-		// Check for UNION attacks.
+		// Block UNION SELECT — prevents cross-table data exfiltration (e.g. wp_users) by admin-level users.
 		if ( preg_match( '/\bUNION\b.*\bSELECT\b/i', $query ) ) {
-			// UNION SELECT is often used in SQL injection, but may be legitimate.
-			// We'll allow it but could add a warning.
-			// For maximum security in production, uncomment the line below:
-			// $errors[] = __( 'UNION queries are not allowed for security reasons.', 'dashboard-widget-manager' );
+			$errors[] = __( 'UNION queries are not allowed for security reasons.', 'dashboard-widget-manager' );
 		}
 
 		return $errors;
@@ -144,6 +164,115 @@ class DWM_Validator {
 			$errors[] = __( 'Cache duration cannot be negative.', 'dashboard-widget-manager' );
 		} elseif ( $duration > 3600 ) {
 			$errors[] = __( 'Cache duration cannot exceed 1 hour (3600 seconds).', 'dashboard-widget-manager' );
+		}
+
+		return $errors;
+	}
+
+	/**
+	 * Validate output_config JSON string.
+	 *
+	 * @param string $output_config JSON string.
+	 * @return array Array of error messages. Empty if valid.
+	 */
+	public static function validate_output_config( $output_config ) {
+		$errors = array();
+
+		if ( empty( $output_config ) ) {
+			return $errors;
+		}
+
+		$config = json_decode( $output_config, true );
+		if ( ! is_array( $config ) || JSON_ERROR_NONE !== json_last_error() ) {
+			$errors[] = __( 'Output config must be valid JSON.', 'dashboard-widget-manager' );
+			return $errors;
+		}
+
+		// Validate display_mode.
+		if ( isset( $config['display_mode'] ) ) {
+			$valid_modes = DWM_Sanitizer::get_valid_display_modes();
+			if ( ! in_array( $config['display_mode'], $valid_modes, true ) ) {
+				$errors[] = sprintf(
+					__( 'Invalid display mode "%s". Must be one of: %s', 'dashboard-widget-manager' ),
+					esc_html( $config['display_mode'] ),
+					implode( ', ', $valid_modes )
+				);
+			}
+		}
+
+		// Validate theme.
+		if ( isset( $config['theme'] ) ) {
+			$valid_themes = DWM_Sanitizer::get_valid_themes();
+			if ( ! in_array( $config['theme'], $valid_themes, true ) ) {
+				$errors[] = sprintf(
+					__( 'Invalid theme "%s". Must be one of: %s', 'dashboard-widget-manager' ),
+					esc_html( $config['theme'] ),
+					implode( ', ', $valid_themes )
+				);
+			}
+		}
+
+		// Validate columns.
+		if ( isset( $config['columns'] ) ) {
+			if ( ! is_array( $config['columns'] ) ) {
+				$errors[] = __( 'Output config columns must be an array.', 'dashboard-widget-manager' );
+			} else {
+				$seen_aliases = array();
+
+				foreach ( $config['columns'] as $index => $col ) {
+					if ( ! is_array( $col ) ) {
+						$errors[] = sprintf(
+							__( 'Column at index %d must be an object.', 'dashboard-widget-manager' ),
+							$index
+						);
+						continue;
+					}
+
+					if ( empty( $col['key'] ) ) {
+						$errors[] = sprintf(
+							__( 'Column at index %d is missing required "key" field.', 'dashboard-widget-manager' ),
+							$index
+						);
+					}
+
+					if ( isset( $col['alias'] ) ) {
+						$alias_normalized = strtolower( trim( (string) $col['alias'] ) );
+						if ( '' !== $alias_normalized ) {
+							if ( isset( $seen_aliases[ $alias_normalized ] ) ) {
+								$errors[] = sprintf(
+									__( 'Duplicate column alias "%s" found in output config.', 'dashboard-widget-manager' ),
+									esc_html( $col['alias'] )
+								);
+							} else {
+								$seen_aliases[ $alias_normalized ] = true;
+							}
+						}
+					}
+
+					// Validate formatter type if present.
+					if ( isset( $col['formatter'] ) && is_array( $col['formatter'] ) && isset( $col['formatter']['type'] ) ) {
+						$valid_formatters = DWM_Sanitizer::get_valid_formatter_types();
+						if ( ! in_array( $col['formatter']['type'], $valid_formatters, true ) ) {
+							$errors[] = sprintf(
+								__( 'Column "%s" has invalid formatter type "%s". Must be one of: %s', 'dashboard-widget-manager' ),
+								esc_html( $col['key'] ?? $index ),
+								esc_html( $col['formatter']['type'] ),
+								implode( ', ', $valid_formatters )
+							);
+						}
+					}
+
+					// Validate link config if present.
+					if ( isset( $col['link'] ) && is_array( $col['link'] ) ) {
+						if ( ! empty( $col['link']['enabled'] ) && empty( $col['link']['url'] ) ) {
+							$errors[] = sprintf(
+								__( 'Column "%s" has link enabled but no URL specified.', 'dashboard-widget-manager' ),
+								esc_html( $col['key'] ?? $index )
+							);
+						}
+					}
+				}
+			}
 		}
 
 		return $errors;
@@ -199,6 +328,7 @@ class DWM_Validator {
 
 		// Validate widgets structure if present.
 		if ( isset( $data['widgets'] ) && is_array( $data['widgets'] ) ) {
+			$seen_uuids = array();
 			foreach ( $data['widgets'] as $index => $widget ) {
 				if ( ! is_array( $widget ) ) {
 					$errors[] = sprintf(
@@ -206,6 +336,32 @@ class DWM_Validator {
 						__( 'Invalid widget at index %d: must be an array.', 'dashboard-widget-manager' ),
 						$index
 					);
+					continue;
+				}
+
+				if ( isset( $widget['uuid'] ) && '' !== trim( (string) $widget['uuid'] ) ) {
+					$uuid = strtolower( trim( (string) $widget['uuid'] ) );
+					if ( function_exists( 'wp_is_uuid' ) ) {
+						$is_valid_uuid = wp_is_uuid( $uuid, 4 ) || wp_is_uuid( $uuid );
+					} else {
+						$is_valid_uuid = (bool) preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $uuid );
+					}
+
+					if ( ! $is_valid_uuid ) {
+						$errors[] = sprintf(
+							/* translators: %d: widget index */
+							__( 'Invalid UUID format for widget at index %d.', 'dashboard-widget-manager' ),
+							$index
+						);
+					} elseif ( isset( $seen_uuids[ $uuid ] ) ) {
+						$errors[] = sprintf(
+							/* translators: %d: widget index */
+							__( 'Duplicate widget UUID found at index %d.', 'dashboard-widget-manager' ),
+							$index
+						);
+					} else {
+						$seen_uuids[ $uuid ] = true;
+					}
 				}
 			}
 		}
@@ -255,29 +411,29 @@ class DWM_Validator {
 	}
 
 	/**
-	 * Validate query against allowed tables.
+	 * Validate query against excluded tables.
 	 *
 	 * @param string $query SQL query.
-	 * @param array  $allowed_tables Array of allowed table names.
+	 * @param array  $excluded_tables Array of excluded table names.
 	 * @return array Array of error messages. Empty if valid.
 	 */
-	public static function validate_query_tables( $query, $allowed_tables = array() ) {
+	public static function validate_query_tables( $query, $excluded_tables = array() ) {
 		$errors = array();
 
-		// If no restrictions, allow all WordPress tables.
-		if ( empty( $allowed_tables ) ) {
+		// If nothing excluded, allow all tables.
+		if ( empty( $excluded_tables ) ) {
 			return $errors;
 		}
 
 		// Extract table names from query.
 		$query_tables = self::extract_table_names( $query );
 
-		// Check each table against allowed list.
+		// Check each table against excluded list.
 		foreach ( $query_tables as $table ) {
-			if ( ! in_array( $table, $allowed_tables, true ) ) {
+			if ( in_array( $table, $excluded_tables, true ) ) {
 				$errors[] = sprintf(
 					/* translators: %s: table name */
-					__( 'Table "%s" is not in the allowed tables list.', 'dashboard-widget-manager' ),
+					__( 'Table "%s" is not allowed by security settings.', 'dashboard-widget-manager' ),
 					$table
 				);
 			}
