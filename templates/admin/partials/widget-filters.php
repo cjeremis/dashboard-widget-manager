@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 
-<div class="dwm-cta-filters-wrapper">
+<div class="dwm-dwm-filters-wrapper">
 
 	<div class="dwm-form-group">
 		<label for="dwm-status-filter"><?php esc_html_e( 'Status', 'dashboard-widget-manager' ); ?></label>

@@ -105,6 +105,7 @@ class DWM_Loader {
 		// AJAX - Settings.
 		$this->add_action( 'wp_ajax_dwm_save_settings', 'DWM_Settings', 'ajax_save_settings' );
 		$this->add_action( 'wp_ajax_dwm_reset_settings', 'DWM_Settings', 'ajax_reset_settings' );
+		$this->add_action( 'wp_ajax_dwm_search_users', 'DWM_Settings', 'ajax_search_users' );
 
 		// AJAX - License.
 		$this->add_action( 'wp_ajax_dwm_pro_activate_license', 'DWM_License_Manager', 'ajax_activate' );
@@ -132,6 +133,7 @@ class DWM_Loader {
 		// Cron.
 		$this->add_action( 'dwm_cleanup_cache', 'DWM_Data', 'cleanup_expired_cache' );
 		$this->add_action( 'dwm_cleanup_trash', 'DWM_Data', 'cleanup_trash' );
+		$this->add_action( 'wp_dashboard_setup', 'DWM_Admin', 'force_remove_hidden_dashboard_widgets', 999 );
 	}
 
 	/**

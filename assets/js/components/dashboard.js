@@ -26,10 +26,6 @@ function handleEditParam() {
 	var editId    = urlParams.get( 'edit' );
 	if ( ! editId ) return;
 
-	var url = new URL( window.location.href );
-	url.searchParams.delete( 'edit' );
-	history.replaceState( null, '', url.toString() );
-
 	setTimeout( function() {
 		var $btn = jQuery( '.dwm-edit-widget[data-widget-id="' + editId + '"]' );
 		if ( $btn.length ) {
@@ -45,10 +41,6 @@ function handleEditParam() {
 function handleCreateParam() {
 	var urlParams = new URLSearchParams( window.location.search );
 	if ( urlParams.get( 'action' ) !== 'create' ) return;
-
-	var url = new URL( window.location.href );
-	url.searchParams.delete( 'action' );
-	history.replaceState( null, '', url.toString() );
 
 	setTimeout( function() {
 		var $btn = jQuery( '.dwm-create-widget' );

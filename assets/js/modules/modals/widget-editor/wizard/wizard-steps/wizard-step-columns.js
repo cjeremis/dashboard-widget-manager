@@ -25,6 +25,20 @@ const FORMATTER_OPTIONS = {
 	'case':  { label: 'Case Transform', options: { transform: 'uppercase' } }
 };
 
+function normalizeAliasLabel( value ) {
+	const raw = String( value || '' );
+	const withSpaces = raw.replace( /_/g, ' ' );
+	const words = withSpaces.trim().split( /\s+/ ).filter( function( word ) {
+		return word.length > 0;
+	} );
+	if ( words.length === 0 ) {
+		return '';
+	}
+	return words.map( function( word ) {
+		return word.charAt( 0 ).toUpperCase() + word.slice( 1 ).toLowerCase();
+	} ).join( ' ' );
+}
+
 /**
  * Initialize step 9 (column aliases + links + formatters)
  */
@@ -102,6 +116,18 @@ export function init() {
 		const newPos = cursorPos + token.length;
 		$urlInput[ 0 ].setSelectionRange( newPos, newPos );
 	});
+
+	// Alias input normalization: underscores -> spaces + title case.
+	$( document ).on( 'input blur', 'input[id^="dwm-column-alias-"]', function() {
+		const normalized = normalizeAliasLabel( $( this ).val() );
+		if ( $( this ).val() !== normalized ) {
+			$( this ).val( normalized );
+		}
+		const index = parseInt( $( this ).data( 'index' ), 10 );
+		if ( columnsList[ index ] ) {
+			columnsList[ index ].alias = normalized || columnsList[ index ].original;
+		}
+	} );
 }
 
 /**
@@ -116,7 +142,7 @@ export function populateColumns( stepConfig ) {
 		const colName = col.name || col;
 		return {
 			original: colName,
-			alias: colName.replace( /^.*\./, '' ),
+			alias: normalizeAliasLabel( colName.replace( /^.*\./, '' ) ),
 			link: { enabled: false, url: '', open_in_new_tab: true },
 			formatter: { type: 'text', options: {} }
 		};
@@ -194,7 +220,6 @@ function renderColumnsList() {
 							'<input type="checkbox" class="dwm-column-link-toggle" data-index="' + index + '"' + ( linkEnabled ? ' checked' : '' ) + '>' +
 							'<span class="dwm-toggle-slider"></span>' +
 						'</label>' +
-						'<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-column-links" aria-label="View help for column links" title="View help for column links"><span class="dashicons dashicons-editor-help"></span></button>' +
 					'</div>' +
 					'<div class="dwm-column-link-fields" style="' + ( linkEnabled ? '' : 'display:none' ) + '">' +
 						'<div class="dwm-column-config-field">' +
@@ -338,10 +363,14 @@ function reorderColumns() {
  * Update column aliases from inputs
  */
 function updateColumnData() {
-	$( '.dwm-column-alias-input' ).each( function() {
+	$( 'input[id^="dwm-column-alias-"]' ).each( function() {
 		const index = parseInt( $( this ).data( 'index' ), 10 );
-		if ( columnsList[ index ] && ! $( this ).hasClass( 'dwm-column-link-url' ) ) {
-			columnsList[ index ].alias = $( this ).val() || columnsList[ index ].original;
+		if ( columnsList[ index ] ) {
+			const normalized = normalizeAliasLabel( $( this ).val() );
+			if ( $( this ).val() !== normalized ) {
+				$( this ).val( normalized );
+			}
+			columnsList[ index ].alias = normalized || columnsList[ index ].original;
 		}
 	});
 }
@@ -430,7 +459,7 @@ export function restoreStep( columnsConfig ) {
 	columnsList = columnsConfig.columns.map( function( c ) {
 		return {
 			original: c.key || c.original,
-			alias: c.alias || c.key || c.original,
+			alias: normalizeAliasLabel( c.alias || c.key || c.original ),
 			link: c.link || { enabled: false, url: '', open_in_new_tab: true },
 			formatter: c.formatter || { type: 'text', options: {} }
 		};

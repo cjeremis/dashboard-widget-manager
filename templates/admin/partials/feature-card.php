@@ -69,7 +69,7 @@ $search_text  = mb_strtolower( implode( ' ', $search_parts ) );
 			<span class="dwm-free-badge"><?php echo esc_html( $feature_labels['badge_free'] ); ?></span>
 		<?php endif; ?>
 		<?php if ( ! empty( $docs_page ) ) : ?>
-			<button type="button" class="dwm-learn-more-button" data-docs-page="<?php echo esc_attr( $docs_page ); ?>">
+			<button type="button" class="dwm-learn-more-button dwm-button-primary" data-open-modal="dwm-docs-modal" data-docs-page="<?php echo esc_attr( $docs_page ); ?>">
 				<?php esc_html_e( 'Learn More', 'dashboard-widget-manager' ); ?>
 			</button>
 		<?php endif; ?>

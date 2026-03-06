@@ -87,9 +87,24 @@ import { isChartDisplayMode } from './theme-assets.js';
 const $ = jQuery;
 
 const DEFAULT_NO_RESULTS_TEMPLATE = '<div style="display:flex;align-items:center;justify-content:center;min-height:120px;padding:24px;text-align:center;">\n  <p style="margin:0;font-size:14px;color:#666;">No results found.</p>\n</div>';
+const EDITOR_TITLE_HELP_BUTTON_HTML = '<button type="button" class="dwm-switch-to-wizard dwm-docs-trigger" id="dwm-editor-title-help" data-open-modal="dwm-docs-modal" data-docs-page="welcome" title="Open documentation"><span class="dashicons dashicons-book-alt"></span></button>';
 
 function getDefaultNoResultsTemplate() {
 	return DEFAULT_NO_RESULTS_TEMPLATE;
+}
+
+function normalizeAliasLabel( value ) {
+	const raw = String( value || '' );
+	const withSpaces = raw.replace( /_/g, ' ' );
+	const words = withSpaces.trim().split( /\s+/ ).filter( function( word ) {
+		return word.length > 0;
+	} );
+	if ( words.length === 0 ) {
+		return '';
+	}
+	return words.map( function( word ) {
+		return word.charAt( 0 ).toUpperCase() + word.slice( 1 ).toLowerCase();
+	} ).join( ' ' );
 }
 
 // ── Column aliases ────────────────────────────────────────────────────────────
@@ -105,7 +120,7 @@ function renderColumnAliases( columns, existingAliases ) {
 
 	$list.empty();
 	columns.forEach( function( col ) {
-		const alias = aliases[ col ] || '';
+		const alias = normalizeAliasLabel( aliases[ col ] || '' );
 		const $row = $( '<div class="dwm-alias-row"></div>' ).attr( 'data-column', col );
 		$row.append( $( '<label class="dwm-alias-label"></label>' ).text( col ) );
 		$row.append(
@@ -334,21 +349,54 @@ function bindEvents() {
 	$( document ).on( 'change', '#dwm-query-edit-toggle', function() {
 		if ( $( this ).is( ':checked' ) ) {
 			$( this ).prop( 'checked', false );
-			$( '#dwm-confirm-sql-edit-modal' ).addClass( 'active' );
+			openModal( 'dwm-confirm-sql-edit-modal' );
 		} else {
 			setQueryEditingEnabled( false );
 		}
 	} );
 
 	$( document ).on( 'click', '#dwm-confirm-sql-edit-yes', function() {
-		$( '#dwm-confirm-sql-edit-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-sql-edit-modal' );
 		$( '#dwm-query-edit-toggle' ).prop( 'checked', true );
 		setQueryEditingEnabled( true );
 	} );
 
 	$( document ).on( 'click', '.dwm-confirm-sql-edit-close', function() {
-		$( '#dwm-confirm-sql-edit-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-sql-edit-modal' );
 		$( '#dwm-query-edit-toggle' ).prop( 'checked', false );
+	} );
+
+	// Query Logging toggle — validate WP_DEBUG / WP_DEBUG_LOG before enabling
+	$( document ).on( 'change', '#dwm-enable-query-logging', function() {
+		if ( ! $( this ).is( ':checked' ) ) return;
+
+		const debugOk    = parseInt( dwmAdminVars.wpDebugEnabled,    10 ) === 1;
+		const debugLogOk = parseInt( dwmAdminVars.wpDebugLogEnabled, 10 ) === 1;
+
+		if ( debugOk && debugLogOk ) return;
+
+		// Prevent the toggle from enabling
+		$( this ).prop( 'checked', false );
+
+		// Populate the missing requirements list
+		const $list = $( '#dwm-query-logging-missing-list' ).empty();
+		if ( ! debugOk ) {
+			$list.append( '<li><code>define( \'WP_DEBUG\', true );</code></li>' );
+		}
+		if ( ! debugLogOk ) {
+			$list.append( '<li><code>define( \'WP_DEBUG_LOG\', true );</code></li>' );
+		}
+
+		openModal( 'dwm-query-logging-warning-modal' );
+	} );
+
+	$( document ).on( 'click', '#dwm-query-logging-warning-enable-anyway', function() {
+		closeModal( 'dwm-query-logging-warning-modal' );
+		$( '#dwm-enable-query-logging' ).prop( 'checked', true );
+	} );
+
+	$( document ).on( 'click', '#dwm-query-logging-warning-cancel', function() {
+		closeModal( 'dwm-query-logging-warning-modal' );
 	} );
 
 	// Template/CSS/JS/No-Results editing toggles
@@ -359,7 +407,7 @@ function bindEvents() {
 		if ( $( this ).is( ':checked' ) ) {
 			setPendingCodeEditType( type );
 			$( this ).prop( 'checked', false );
-			$( '#dwm-confirm-code-edit-modal' ).addClass( 'active' );
+			openModal( 'dwm-confirm-code-edit-modal' );
 		} else {
 			setCodeEditingEnabled( type, false );
 		}
@@ -369,7 +417,7 @@ function bindEvents() {
 		const type = getPendingCodeEditType();
 		if ( ! type ) return;
 		setPendingCodeEditType( '' );
-		$( '#dwm-confirm-code-edit-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-code-edit-modal' );
 		$( '#' + getToggleIdByCodeType( type ) ).prop( 'checked', true );
 		setCodeEditingEnabled( type, true );
 	} );
@@ -380,7 +428,7 @@ function bindEvents() {
 			$( '#' + getToggleIdByCodeType( pending ) ).prop( 'checked', false );
 		}
 		setPendingCodeEditType( '' );
-		$( '#dwm-confirm-code-edit-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-code-edit-modal' );
 	} );
 
 	// Theme selection in the template tab.
@@ -397,35 +445,52 @@ function bindEvents() {
 		setQueryPreviewTab( $(this).data('tab') );
 	});
 
+	// Template tab sub-tab switching
+	$(document).on('click', '.dwm-template-preview-tab', function(e) {
+		e.preventDefault();
+		var tab = $(this).data('template-tab');
+		$('.dwm-template-preview-tab').removeClass('active');
+		$(this).addClass('active');
+		$('.dwm-template-preview-pane').removeClass('active');
+		$('.dwm-template-preview-pane[data-template-pane="' + tab + '"]').addClass('active');
+
+		// Refresh CodeMirror when switching to a pane
+		if ( tab === 'main' && state.codeEditors.template ) {
+			state.codeEditors.template.codemirror.refresh();
+		} else if ( tab === 'no-results' && state.codeEditors.no_results_template ) {
+			state.codeEditors.no_results_template.codemirror.refresh();
+		}
+	});
+
 	// Switch to wizard from manual mode
 	$(document).on('click', '#dwm-switch-to-wizard', function(e) {
 		e.preventDefault();
-		$('#dwm-confirm-wizard-modal').addClass('active');
+		openModal('dwm-confirm-wizard-modal');
 	});
 
 	$(document).on('click', '#dwm-confirm-wizard-yes', function() {
-		$('#dwm-confirm-wizard-modal').removeClass('active');
+		closeModal('dwm-confirm-wizard-modal');
 		switchToWizardMode();
 	});
 
 	$(document).on('click', '.dwm-confirm-wizard-close', function() {
-		$('#dwm-confirm-wizard-modal').removeClass('active');
+		closeModal('dwm-confirm-wizard-modal');
 	});
 
 	// Switch to scratch from wizard mode
-	$(document).on('click', '#dwm-switch-to-scratch', function(e) {
+	$(document).on('click', '.dwm-switch-to-scratch', function(e) {
 		e.preventDefault();
-		$('#dwm-confirm-scratch-modal').addClass('active');
+		openModal('dwm-confirm-scratch-modal');
 	});
 
 	$(document).on('click', '#dwm-confirm-scratch-yes', function() {
-		$('#dwm-confirm-scratch-modal').removeClass('active');
+		closeModal('dwm-confirm-scratch-modal');
 		transitionToScratch();
 		switchTab('builder');
 	});
 
 	$(document).on('click', '.dwm-confirm-scratch-close', function() {
-		$('#dwm-confirm-scratch-modal').removeClass('active');
+		closeModal('dwm-confirm-scratch-modal');
 	});
 
 	// Creation method selection
@@ -438,6 +503,7 @@ function bindEvents() {
 			$('#dwm-widget-form').hide();
 			$('#dwm-widget-editor-modal .dwm-modal-footer').hide();
 			$('#dwm-wizard-footer').show();
+			$('#dwm-switch-to-scratch').show();
 			$('#dwm-switch-to-wizard').hide();
 			showWizard();
 		} else {
@@ -467,6 +533,11 @@ function bindEvents() {
 			.prop('required', isOn)
 			.attr('placeholder', isOn ? 'Required' : $textarea.data('optional-placeholder'));
 		$group.find('.dwm-desc-required-asterisk').toggle(isOn);
+	});
+
+	// Caching toggle.
+	$(document).on('change', '#dwm-enable-caching', function() {
+		updateCacheDurationVisibility();
 	});
 
 	// Results preview
@@ -611,6 +682,10 @@ function bindEvents() {
 
 	// Rebuild template when alias inputs change.
 	$( document ).on( 'input', '#dwm-output-column-aliases-list .dwm-alias-input', function() {
+		const normalized = normalizeAliasLabel( $( this ).val() );
+		if ( $( this ).val() !== normalized ) {
+			$( this ).val( normalized );
+		}
 		rebuildTemplateWithAliases();
 	} );
 
@@ -770,8 +845,8 @@ function switchTab(tab) {
 		state.codeEditors[tab].codemirror.refresh();
 	}
 
-	// Refresh the no-results CodeMirror when switching to the output tab.
-	if ( tab === 'output' && state.codeEditors.no_results_template ) {
+	// Refresh the no-results CodeMirror when switching to the template tab.
+	if ( tab === 'template' && state.codeEditors.no_results_template ) {
 		state.codeEditors.no_results_template.codemirror.refresh();
 	}
 
@@ -785,6 +860,11 @@ function switchTab(tab) {
  */
 function toggleTabLock(tab, locked) {
 	$('.dwm-tab-link[data-tab="' + tab + '"]').toggleClass('is-disabled', locked);
+}
+
+function updateCacheDurationVisibility() {
+	const enabled = $('#dwm-enable-caching').is(':checked');
+	$('#dwm-cache-duration-group').toggle(enabled);
 }
 
 /**
@@ -815,7 +895,7 @@ function updateTabLocks() {
  */
 function openCreateModal() {
 	state.currentWidgetId = null;
-	$('#dwm-editor-title').html('<span class="dashicons dashicons-plus-alt2"></span> Create New Widget <button type="button" class="dwm-switch-to-wizard" id="dwm-switch-to-wizard" style="display:none" title="Switch to Wizard"><span class="dashicons dashicons-lightbulb"></span></button>');
+	$('#dwm-editor-title').html('<span class="dashicons dashicons-plus-alt2"></span> Create New Widget ' + EDITOR_TITLE_HELP_BUTTON_HTML);
 	$('#dwm-widget-form')[0].reset();
 	$('#dwm-widget-id').val('');
 	$('#dwm-creation-method').val('');
@@ -823,6 +903,7 @@ function openCreateModal() {
 	$('#dwm-enable-caching').prop('checked', true);
 	$('#dwm-enable-query-logging').prop('checked', false);
 	$('#dwm-cache-duration').val(300);
+	updateCacheDurationVisibility();
 	$('#dwm-auto-refresh').val('0');
 	$('#dwm-max-execution-time').val(30);
 	state.queryValidated = false;
@@ -851,7 +932,6 @@ function openCreateModal() {
 	$('#dwm-builder-chart-legend').prop('checked', true);
 	$('#dwm-builder-chart-theme').val('classic');
 	$('input[name="dwm_display_mode"][value="table"]').prop('checked', true);
-	$('.dwm-chart-mode-notice').hide();
 	$('#dwm-builder-chart-options').hide();
 	$('#dwm-show-description').prop('checked', false);
 	$('#dwm-widget-description').prop('required', false);
@@ -870,6 +950,7 @@ function openCreateModal() {
 	$('#dwm-widget-form').hide();
 	$('#dwm-widget-editor-modal .dwm-modal-footer').hide();
 	$('#dwm-wizard-footer').hide();
+	$('#dwm-switch-to-scratch').hide();
 	$('#dwm-switch-to-wizard').hide();
 	hideWizard();
 
@@ -898,7 +979,7 @@ function openEditModal(widgetId) {
 			state.currentWidgetId = widgetId;
 			populateForm(data.widget);
 			const widgetName = $('<span>').text(data.widget.name || '').html();
-			$('#dwm-editor-title').html('<span class="dashicons dashicons-edit"></span> Edit Widget' + (widgetName ? ': ' + widgetName : ''));
+			$('#dwm-editor-title').html('<span class="dashicons dashicons-edit"></span> Edit Widget' + (widgetName ? ': ' + widgetName : '') + ' ' + EDITOR_TITLE_HELP_BUTTON_HTML);
 
 			$('#dwm-creation-method-step').hide();
 			hideWizard();
@@ -939,6 +1020,7 @@ function switchToWizardMode() {
 	$('#dwm-widget-form').hide();
 	$('#dwm-widget-editor-modal .dwm-modal-footer').hide();
 	$('#dwm-wizard-footer').show();
+	$('#dwm-switch-to-scratch').show();
 	$('#dwm-switch-to-wizard').hide();
 	showWizardWithData( wizardData );
 }
@@ -1059,6 +1141,7 @@ function populateForm(widget) {
 	$('#dwm-enable-caching').prop('checked', widget.enable_caching == 1);
 	$('#dwm-enable-query-logging').prop('checked', widget.enable_query_logging == 1);
 	$('#dwm-cache-duration').val(widget.cache_duration);
+	updateCacheDurationVisibility();
 	$('#dwm-auto-refresh').val(widget.auto_refresh == 1 ? '1' : '0');
 	$('#dwm-max-execution-time').val(widget.max_execution_time || 30);
 	if (state.codeEditors.query) {
@@ -1378,9 +1461,12 @@ function filterWidgetsByStatus(status) {
 
 	$('.dwm-widget-card').each(function() {
 		const cardStatus = $(this).attr('data-widget-status') || 'draft';
+		const isDemo = $(this).attr('data-is-demo') === '1';
 		let visible = true;
 
-		if (status === 'all') {
+		if (status === 'demo') {
+			visible = isDemo;
+		} else if (status === 'all') {
 			if (cardStatus === 'archived' || cardStatus === 'trash') {
 				visible = false;
 			}
@@ -1398,16 +1484,19 @@ function filterWidgetsByStatus(status) {
  * Update status filter counts
  */
 function updateStatusCounts() {
-	const counts = { publish: 0, draft: 0, archived: 0, trash: 0 };
+	const counts = { publish: 0, draft: 0, archived: 0, trash: 0, demo: 0 };
 
 	$('.dwm-widget-card').each(function() {
 		const s = $(this).attr('data-widget-status') || 'draft';
 		if (counts.hasOwnProperty(s)) {
 			counts[s]++;
 		}
+		if ($(this).attr('data-is-demo') === '1') {
+			counts.demo++;
+		}
 	});
 
-	const filterMap = { publish: 'Active', draft: 'Draft', archived: 'Archive', trash: 'Trash' };
+	const filterMap = { publish: 'Active', draft: 'Draft', archived: 'Archive', trash: 'Trash', demo: 'Demo' };
 
 	Object.keys(filterMap).forEach(function(key) {
 		const $btn = $(`.dwm-status-filter[data-filter="${key}"]`);

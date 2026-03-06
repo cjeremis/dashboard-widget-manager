@@ -18,6 +18,7 @@ export function initResetModal() {
 
 	// Export first button in reset modal — open the export options modal on top
 	$(document).on('click', '#dwm-reset-export-first', function() {
+		closeModal('dwm-reset-data-modal');
 		openModal('dwm-export-options-modal');
 	});
 

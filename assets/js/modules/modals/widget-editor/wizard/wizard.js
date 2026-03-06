@@ -36,6 +36,7 @@ import * as stepCardListTheme from './wizard-steps/wizard-step-card-list-theme.j
 
 // ── External Dependencies ────────────────────────────────────────────────────
 import { showWizardPreview } from '../../preview-modal.js';
+import { ensureSearchableSelect, refreshSearchableSelect } from '../../../partials/searchable-select.js';
 
 // ── Extracted Wizard Modules ─────────────────────────────────────────────────
 import {
@@ -81,6 +82,7 @@ import {
 import { renderOutputControls } from '../widget-editor-output.js';
 
 const $ = jQuery;
+const EDITOR_TITLE_HELP_BUTTON_HTML = '<button type="button" class="dwm-switch-to-wizard dwm-docs-trigger" id="dwm-editor-title-help" data-open-modal="dwm-docs-modal" data-docs-page="welcome" title="Open documentation"><span class="dashicons dashicons-editor-help"></span></button>';
 
 // ── Initialisation ───────────────────────────────────────────────────────────
 
@@ -160,18 +162,18 @@ export function initWizard() {
 	// Start Over - show confirmation modal
 	$( document ).on( 'click', '.dwm-wizard-start-over', function( e ) {
 		e.preventDefault();
-		$( '#dwm-confirm-start-over-modal' ).addClass( 'active' );
+		openModal( 'dwm-confirm-start-over-modal' );
 	});
 
 	// Confirm start over
 	$( document ).on( 'click', '#dwm-confirm-start-over-yes', function() {
-		$( '#dwm-confirm-start-over-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-start-over-modal' );
 		resetWizard();
 	});
 
 	// Cancel start over
 	$( document ).on( 'click', '.dwm-confirm-start-over-cancel', function() {
-		$( '#dwm-confirm-start-over-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-start-over-modal' );
 	});
 
 	// Preview widget button
@@ -185,7 +187,7 @@ export function initWizard() {
 	// ── Validation Error Modal ───────────────────────────────────────────────
 
 	$( document ).on( 'click', '.dwm-validation-error-close', function() {
-		$( '#dwm-validation-error-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-validation-error-modal' );
 	});
 
 	// ── Step 7: Limit ────────────────────────────────────────────────────────
@@ -215,7 +217,7 @@ export function initWizard() {
 			wizardState.pendingDisplayTypeChange = newDisplayType;
 			// Revert radio selection while modal is open
 			$( `input[name="dwm_wizard_display_mode"][value="${ oldDisplayType }"]` ).prop( 'checked', true );
-			$( '#dwm-confirm-display-type-change-modal' ).addClass( 'active' );
+			openModal( 'dwm-confirm-display-type-change-modal' );
 			return;
 		}
 
@@ -226,7 +228,7 @@ export function initWizard() {
 	// Confirm display type change (wizard context only)
 	$( document ).on( 'click', '#dwm-confirm-display-type-change-yes', function() {
 		if ( ! wizardState.pendingDisplayTypeChange ) return;
-		$( '#dwm-confirm-display-type-change-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-display-type-change-modal' );
 		const newDisplayType = wizardState.pendingDisplayTypeChange;
 		$( `input[name="dwm_wizard_display_mode"][value="${ newDisplayType }"]` ).prop( 'checked', true );
 		applyDisplayTypeChange( newDisplayType );
@@ -235,7 +237,7 @@ export function initWizard() {
 
 	// Cancel display type change
 	$( document ).on( 'click', '.dwm-confirm-display-type-change-close', function() {
-		$( '#dwm-confirm-display-type-change-modal' ).removeClass( 'active' );
+		closeModal( 'dwm-confirm-display-type-change-modal' );
 		wizardState.pendingDisplayTypeChange = '';
 	});
 }
@@ -462,14 +464,14 @@ export function resetWizard() {
 
 	$( '#dwm-wizard-container' ).hide();
 	$( '#dwm-wizard-footer' ).hide();
+	$( '#dwm-switch-to-scratch' ).hide();
 	$( '#dwm-widget-form' ).hide();
 	$( '#dwm-widget-editor-modal .dwm-modal-footer' ).hide();
 	$( '#dwm-creation-method-step' ).show();
 
 	// Reset title
 	$( '#dwm-editor-title' ).html(
-		'<span class="dashicons dashicons-plus-alt2"></span> Create New Widget ' +
-		'<button type="button" class="dwm-switch-to-wizard" id="dwm-switch-to-wizard" style="display:none" title="Switch to Wizard"><span class="dashicons dashicons-lightbulb"></span></button>'
+		'<span class="dashicons dashicons-plus-alt2"></span> Create New Widget ' + EDITOR_TITLE_HELP_BUTTON_HTML
 	);
 
 	// Hide Next button (will be shown conditionally as steps are visited)
@@ -702,6 +704,36 @@ function getStep10ThemeByMode( mode ) {
 	};
 }
 
+function normalizeWizardHelpButtons() {
+	$( '.dwm-wizard-step' ).each( function() {
+		const $step = $( this );
+		const $help = $step.find( '> .dwm-wizard-step-help, .dwm-wizard-step-header > .dwm-wizard-step-help' ).first();
+		if ( ! $help.length ) {
+			return;
+		}
+
+		const $header = $step.find( '.dwm-wizard-step-header' ).first();
+		if ( ! $header.length ) {
+			return;
+		}
+
+		let $titleRow = $header.find( '.dwm-wizard-step-header-title-row' ).first();
+		if ( ! $titleRow.length ) {
+			const $h3 = $header.find( 'h3' ).first();
+			if ( ! $h3.length ) {
+				return;
+			}
+			$titleRow = $( '<div class="dwm-wizard-step-header-title-row"></div>' );
+			$h3.before( $titleRow );
+			$titleRow.append( $h3 );
+		}
+
+		if ( ! $titleRow.find( '.dwm-wizard-step-help' ).length ) {
+			$titleRow.append( $help );
+		}
+	} );
+}
+
 // ── Step Navigation ──────────────────────────────────────────────────────────
 
 function goToStep( step ) {
@@ -731,17 +763,16 @@ function goToStep( step ) {
 	}
 
 	// Update modal title with widget name once past step 1
-	const $switchToScratchBtn = '<button type="button" id="dwm-switch-to-scratch" class="dwm-switch-to-scratch" title="Switch to Manual mode"><span class="dashicons dashicons-editor-code"></span></button>';
 	if ( step > 1 && wizardState.data.name ) {
 		$( '#dwm-editor-title' ).html(
 			'<span class="dashicons dashicons-plus-alt2"></span> Create New Widget: ' +
 			$( '<span>' ).text( wizardState.data.name ).html() +
-			' ' + $switchToScratchBtn
+			' ' + EDITOR_TITLE_HELP_BUTTON_HTML
 		);
 	} else {
 		$( '#dwm-editor-title' ).html(
 			'<span class="dashicons dashicons-plus-alt2"></span> Create New Widget ' +
-			$switchToScratchBtn
+			EDITOR_TITLE_HELP_BUTTON_HTML
 		);
 	}
 
@@ -764,8 +795,10 @@ function goToStep( step ) {
 		if ( step3Module && typeof step3Module.initializeNextButton === 'function' ) {
 			step3Module.initializeNextButton();
 		}
-		// If returning to step 3 with a table already selected, ensure columns are displayed
 		const tableSelector = getStep3TableSelector( wizardState.data.displayMode );
+		ensureSearchableSelect( tableSelector, 'Select Primary Table', 'Search Tables' );
+		refreshSearchableSelect( tableSelector );
+		// If returning to step 3 with a table already selected, ensure columns are displayed
 		const selectedTable = $( tableSelector ).val();
 		if ( selectedTable && step3Module && typeof step3Module.restoreColumnsDisplay === 'function' ) {
 			step3Module.restoreColumnsDisplay();
@@ -836,6 +869,8 @@ function goToStep( step ) {
 			.attr( 'title', step10Config.helpLabel );
 		step10Config.restore();
 	}
+
+	normalizeWizardHelpButtons();
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
@@ -1138,7 +1173,7 @@ function completeWizard() {
 
 	// Apply cache settings from wizard to editor form fields.
 	const cacheData = wizardState.data.cache || {};
-	$( '#dwm-enable-caching' ).prop( 'checked', cacheData.enabled !== false );
+	$( '#dwm-enable-caching' ).prop( 'checked', cacheData.enabled !== false ).trigger( 'change' );
 	if ( cacheData.duration ) {
 		$( '#dwm-cache-duration' ).val( cacheData.duration );
 	}
@@ -1148,6 +1183,7 @@ function completeWizard() {
 
 	$( '#dwm-wizard-container' ).hide();
 	$( '#dwm-wizard-footer' ).hide();
+	$( '#dwm-switch-to-scratch' ).hide();
 	$( '#dwm-widget-form' ).show();
 	$( '#dwm-widget-editor-modal .dwm-modal-footer' ).show();
 
@@ -1155,8 +1191,7 @@ function completeWizard() {
 	var escapedName = $( '<span>' ).text( wizardState.data.name || '' ).html();
 	$( '#dwm-editor-title' ).html(
 		'<span class="dashicons dashicons-plus-alt2"></span> Create New Widget' +
-		( escapedName ? ': ' + escapedName : '' ) +
-		' <button type="button" class="dwm-switch-to-wizard" id="dwm-switch-to-wizard" title="Switch to Wizard"><span class="dashicons dashicons-lightbulb"></span></button>'
+		( escapedName ? ': ' + escapedName : '' ) + ' ' + EDITOR_TITLE_HELP_BUTTON_HTML
 	);
 }
 

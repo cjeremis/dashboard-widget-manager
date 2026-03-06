@@ -45,11 +45,140 @@ class DWM_Data {
 	 * @return array Plugin settings.
 	 */
 	public function get_settings() {
+		$role_keys = DWM_Access_Control::get_all_role_keys();
 		$defaults = array(
 			'excluded_tables'             => '',
 			'hide_help_dropdown'          => 0,
 			'hide_screen_options'         => 0,
 			'hidden_dashboard_widgets'    => '',
+			'hidden_third_party_dashboard_widgets' => '',
+			'dashboard_branding_enabled'  => 0,
+			'dashboard_logo_enabled'      => 0,
+			'dashboard_background_enabled' => 0,
+			'dashboard_background_type'   => 'default',
+			'dashboard_bg_solid_color'    => '#ffffff',
+			'dashboard_bg_gradient_type'  => 'linear',
+			'dashboard_bg_gradient_angle' => 90,
+			'dashboard_bg_gradient_start' => '#667eea',
+			'dashboard_bg_gradient_start_position' => 0,
+			'dashboard_bg_gradient_end'   => '#764ba2',
+			'dashboard_bg_gradient_end_position' => 100,
+			'dashboard_padding_enabled'   => 0,
+			'dashboard_padding_linked'    => 1,
+			'dashboard_padding_top_value' => 20,
+			'dashboard_padding_top_unit'  => 'px',
+			'dashboard_padding_right_value' => 20,
+			'dashboard_padding_right_unit' => 'px',
+			'dashboard_padding_bottom_value' => 20,
+			'dashboard_padding_bottom_unit' => 'px',
+			'dashboard_padding_left_value' => 20,
+			'dashboard_padding_left_unit' => 'px',
+			'dashboard_logo_url'          => '',
+			'dashboard_logo_height'       => 56,
+			'dashboard_logo_height_unit'  => 'px',
+			'dashboard_logo_alignment'    => 'left',
+			'dashboard_logo_link_enabled' => 0,
+			'dashboard_logo_link_url'     => '',
+			'dashboard_logo_link_new_tab' => 0,
+			'dashboard_logo_bg_type'       => 'default',
+			'dashboard_logo_bg_solid_color' => '#ffffff',
+			'dashboard_logo_bg_gradient_type' => 'linear',
+			'dashboard_logo_bg_gradient_angle' => 90,
+			'dashboard_logo_bg_gradient_start' => '#667eea',
+			'dashboard_logo_bg_gradient_start_position' => 0,
+			'dashboard_logo_bg_gradient_end' => '#764ba2',
+			'dashboard_logo_bg_gradient_end_position' => 100,
+			'dashboard_logo_padding_top'   => 10,
+			'dashboard_logo_padding_right' => 10,
+			'dashboard_logo_padding_bottom' => 10,
+			'dashboard_logo_padding_left'  => 10,
+			'dashboard_logo_padding_unit'  => 'px',
+			'dashboard_logo_padding_linked' => 1,
+			'dashboard_logo_margin_top'    => 0,
+			'dashboard_logo_margin_right'  => 0,
+			'dashboard_logo_margin_bottom' => 0,
+			'dashboard_logo_margin_left'   => 0,
+			'dashboard_logo_margin_unit'   => 'px',
+			'dashboard_logo_margin_linked' => 1,
+			'dashboard_logo_border_top'    => 0,
+			'dashboard_logo_border_right'  => 0,
+			'dashboard_logo_border_bottom' => 0,
+			'dashboard_logo_border_left'   => 0,
+			'dashboard_logo_border_unit'   => 'px',
+			'dashboard_logo_border_linked' => 1,
+			'dashboard_logo_border_style'  => 'none',
+			'dashboard_logo_border_color'  => '#dddddd',
+			'dashboard_logo_border_radius_tl' => 0,
+			'dashboard_logo_border_radius_tr' => 0,
+			'dashboard_logo_border_radius_br' => 0,
+			'dashboard_logo_border_radius_bl' => 0,
+			'dashboard_logo_border_radius_unit' => 'px',
+			'dashboard_logo_border_radius_linked' => 1,
+			'dashboard_title_mode'        => 'default',
+			'dashboard_title_text'        => '',
+			'dashboard_title_font_family' => 'inherit',
+			'dashboard_title_font_size'   => '32px',
+			'dashboard_title_font_weight' => '700',
+			'dashboard_title_alignment'   => 'left',
+			'dashboard_title_color'       => '#1d2327',
+			'dashboard_hero_enabled'      => 0,
+			'dashboard_hero_theme'        => 'text-left',
+			'dashboard_hero_title'        => __( 'Welcome to your custom dashboard', 'dashboard-widget-manager' ),
+			'dashboard_hero_title_font_family' => 'inherit',
+			'dashboard_hero_title_font_size'   => '28px',
+			'dashboard_hero_title_font_weight' => '700',
+			'dashboard_hero_title_alignment'   => 'left',
+			'dashboard_hero_title_color'       => '#ffffff',
+			'dashboard_hero_message'      => '',
+			'dashboard_hero_background_type' => 'solid',
+			'dashboard_hero_bg_solid_color'  => '#667eea',
+			'dashboard_hero_bg_gradient_type' => 'linear',
+			'dashboard_hero_bg_gradient_angle' => 90,
+			'dashboard_hero_bg_gradient_start' => '#667eea',
+			'dashboard_hero_bg_gradient_start_position' => 0,
+			'dashboard_hero_bg_gradient_end' => '#764ba2',
+			'dashboard_hero_bg_gradient_end_position' => 100,
+			'dashboard_hero_padding_top'     => 16,
+			'dashboard_hero_padding_right'   => 20,
+			'dashboard_hero_padding_bottom'  => 16,
+			'dashboard_hero_padding_left'    => 20,
+			'dashboard_hero_padding_unit'    => 'px',
+			'dashboard_hero_padding_linked'  => 1,
+			'dashboard_hero_margin_top'      => 10,
+			'dashboard_hero_margin_right'    => 0,
+			'dashboard_hero_margin_bottom'   => 16,
+			'dashboard_hero_margin_left'     => 0,
+			'dashboard_hero_margin_unit'     => 'px',
+			'dashboard_hero_margin_linked'   => 0,
+			'dashboard_hero_border_top'      => 0,
+			'dashboard_hero_border_right'    => 0,
+			'dashboard_hero_border_bottom'   => 0,
+			'dashboard_hero_border_left'     => 0,
+			'dashboard_hero_border_unit'     => 'px',
+			'dashboard_hero_border_linked'   => 1,
+			'dashboard_hero_border_style'    => 'none',
+			'dashboard_hero_border_color'    => '#dddddd',
+			'dashboard_hero_border_radius_tl' => 10,
+			'dashboard_hero_border_radius_tr' => 10,
+			'dashboard_hero_border_radius_br' => 10,
+			'dashboard_hero_border_radius_bl' => 10,
+			'dashboard_hero_border_radius_unit' => 'px',
+			'dashboard_hero_border_radius_linked' => 1,
+			'dashboard_hero_height'          => 0,
+			'dashboard_hero_height_unit'     => 'px',
+			'dashboard_hero_min_height'      => 0,
+			'dashboard_hero_min_height_unit' => 'px',
+			'dashboard_notice_enabled'    => 0,
+			'dashboard_notice_type'       => 'toast',
+			'dashboard_notice_level'      => 'info',
+			'dashboard_notice_title'      => '',
+			'dashboard_notice_message'    => '',
+			'dashboard_notice_dismissible' => 1,
+			'dashboard_notice_auto_dismiss' => 6,
+			'dashboard_notice_position'   => 'bottom-right',
+			'dashboard_notice_frequency'  => 'always',
+			'access_allowed_roles'        => implode( "\n", $role_keys ),
+			'restricted_user_ids'         => '',
 			'support_data_sharing_opt_in' => 0,
 		);
 
@@ -488,11 +617,12 @@ class DWM_Data {
 	/**
 	 * Update widget status.
 	 *
-	 * @param int    $id     Widget ID.
-	 * @param string $status New status (publish, draft, archived, trash).
+	 * @param int    $id              Widget ID.
+	 * @param string $status          New status (publish, draft, archived, trash).
+	 * @param bool   $clear_demo_flag Whether to clear is_demo during status update.
 	 * @return bool True on success, false on failure.
 	 */
-	public function update_widget_status( $id, $status ) {
+	public function update_widget_status( $id, $status, $clear_demo_flag = false ) {
 		if ( ! in_array( $status, self::VALID_STATUSES, true ) ) {
 			return false;
 		}
@@ -507,6 +637,10 @@ class DWM_Data {
 			if ( $widget && empty( $widget['first_published_at'] ) ) {
 				$update_data['first_published_at'] = current_time( 'mysql' );
 			}
+		}
+
+		if ( $clear_demo_flag ) {
+			$update_data['is_demo'] = 0;
 		}
 
 		return $this->update_widget( $id, $update_data );

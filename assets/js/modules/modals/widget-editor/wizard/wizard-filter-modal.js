@@ -17,7 +17,9 @@ import {
 } from './wizard-utils.js';
 
 import { ajax } from '../../../partials/ajax.js';
+import { ensureSearchableSelect, refreshSearchableSelect } from '../../../partials/searchable-select.js';
 import * as columnValidator from '../../../utilities/column-validator.js';
+import { buildNoResultsPreviewHtml } from '../output-preview-empty-state.js';
 
 const $ = jQuery;
 
@@ -173,6 +175,8 @@ export function openFilterConfigModal( editIndex ) {
 	});
 
 	$( '#dwm-filter-config-column' ).html( columnOptions );
+	ensureSearchableSelect( '#dwm-filter-config-column', 'Search columns...' );
+	refreshSearchableSelect( '#dwm-filter-config-column' );
 
 	// Update title
 	if ( wizardState.filterConfigEditIndex >= 0 ) {
@@ -654,7 +658,7 @@ export function renderFilterOutputTable( results ) {
 	const $content = $( '#dwm-filter-output-preview-content' );
 
 	if ( ! results || results.length === 0 ) {
-		$content.html( '<p class="dwm-output-empty">No results returned.</p>' );
+		$content.html( buildNoResultsPreviewHtml() );
 		return;
 	}
 

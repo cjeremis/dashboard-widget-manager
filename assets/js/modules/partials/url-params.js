@@ -29,9 +29,35 @@
 
 	// All URL params this module manages — always cleared together on close
 	var ALL_PARAMS = [ 'modal', 'tab', 'widget' ];
+	var isPageUnloading = false;
+
+	// Prevent cleanAllParams from firing during page unload/refresh
+	window.addEventListener( 'pagehide',     function() { isPageUnloading = true; } );
+	window.addEventListener( 'beforeunload', function() { isPageUnloading = true; } );
+
+	function isTrackedModalId( modalId ) {
+		return Object.keys( MODAL_MAP ).some( function( k ) {
+			return MODAL_MAP[ k ] === modalId;
+		} );
+	}
 
 	function getParam( key ) {
 		return new URLSearchParams( window.location.search ).get( key );
+	}
+
+	function isDwmPageContext() {
+		var page = new URLSearchParams( window.location.search ).get( 'page' ) || '';
+		var bodyClass = document.body ? ( document.body.className || '' ) : '';
+
+		if ( page === 'dashboard-widget-manager' || page.indexOf( 'dwm-' ) === 0 ) {
+			return true;
+		}
+
+		return (
+			bodyClass.indexOf( 'toplevel_page_dashboard-widget-manager' ) !== -1 ||
+			bodyClass.indexOf( 'widget-manager_page_dwm-' ) !== -1 ||
+			bodyClass.indexOf( 'index-php' ) !== -1
+		);
 	}
 
 	function setParams( params ) {
@@ -65,8 +91,12 @@
 			$link.length ? $link : $( '#dwm-docs-modal .dwm-docs-welcome-link' )
 		);
 
-		$( '#dwm-docs-modal' ).addClass( 'active' );
-		$( 'body' ).addClass( 'dwm-modal-open' );
+		if ( window.dwmModalAPI && typeof window.dwmModalAPI.open === 'function' ) {
+			window.dwmModalAPI.open( '#dwm-docs-modal', { inheritState: false } );
+		} else {
+			$( '#dwm-docs-modal' ).addClass( 'active' );
+			$( 'body' ).addClass( 'dwm-modal-open' );
+		}
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -83,31 +113,29 @@
 		if ( ! $el.length ) return;
 
 		var observer = new MutationObserver( function() {
-			if ( $el.hasClass( 'active' ) ) {
-				// Build full param set: start with all cleared, then apply extras
-				var params = { modal: slug };
-				ALL_PARAMS.forEach( function( k ) { if ( k !== 'modal' ) params[ k ] = null; } );
+			if ( ! $el.hasClass( 'active' ) ) return;
 
-				if ( getExtraParams ) {
-					var extra = getExtraParams();
-					if ( extra ) {
-						Object.keys( extra ).forEach( function( k ) { params[ k ] = extra[ k ]; } );
-					}
-				}
+			// Build full param set: start with all cleared, then apply extras
+			var params = { modal: slug };
+			ALL_PARAMS.forEach( function( k ) { if ( k !== 'modal' ) params[ k ] = null; } );
 
-				setParams( params );
-			} else {
-				// Only clear when no other tracked modal remains open
-				if ( ! $( TRACKED_SELECTORS ).filter( '.active' ).length ) {
-					cleanAllParams();
+			if ( getExtraParams ) {
+				var extra = getExtraParams();
+				if ( extra ) {
+					Object.keys( extra ).forEach( function( k ) { params[ k ] = extra[ k ]; } );
 				}
 			}
+
+			setParams( params );
 		} );
 
 		observer.observe( $el[ 0 ], { attributes: true, attributeFilter: [ 'class' ] } );
 	}
 
 	$( function() {
+		if ( ! isDwmPageContext() ) {
+			return;
+		}
 
 		// ── Read params on load ───────────────────────────────────────────────
 		var modal    = getParam( 'modal' );
@@ -115,16 +143,17 @@
 		var widgetId = getParam( 'widget' );
 
 		if ( modal ) {
-			// Strip all managed params from URL immediately
-			// (observers will re-write them once the modal opens)
-			cleanAllParams();
-
 			var modalId = MODAL_MAP[ modal ] || modal;
 
 			if ( modal === 'features' ) {
 				setTimeout( function() {
-					$( '#' + modalId ).addClass( 'active' );
-					$( 'body' ).addClass( 'dwm-modal-open' );
+					if ( window.dwmModalAPI && typeof window.dwmModalAPI.open === 'function' ) {
+						window.dwmModalAPI.open( '#' + modalId, { inheritState: false } );
+					} else {
+						$( '#' + modalId ).addClass( 'active' );
+						$( 'body' ).addClass( 'dwm-modal-open' );
+						$( document ).trigger( 'dwmModalOpened', [ $( '#' + modalId ), modalId ] );
+					}
 					if ( tab ) {
 						var $btn = $( '[data-dwm-features-page="' + tab + '"]' ).first();
 						if ( $btn.length ) $btn.trigger( 'click' );
@@ -159,7 +188,9 @@
 			} else {
 				// Generic: open any modal by ID
 				setTimeout( function() {
-					if ( typeof window.openModal === 'function' ) {
+					if ( window.dwmModalAPI && typeof window.dwmModalAPI.open === 'function' ) {
+						window.dwmModalAPI.open( '#' + modalId, { inheritState: false } );
+					} else if ( typeof window.openModal === 'function' ) {
 						window.openModal( modalId );
 					} else {
 						$( '#' + modalId ).addClass( 'active' );
@@ -198,6 +229,35 @@
 			var page = $( this ).data( 'docs-page' );
 			if ( page ) {
 				setParams( { modal: 'docs', tab: page !== 'welcome' ? page : null, widget: null } );
+			}
+		} );
+
+	// ── Update tab param when docs modal accordion expands (auto-nav) ─────
+		$( document ).on( 'click', '#dwm-docs-modal .dwm-docs-accordion-trigger', function() {
+			setTimeout( function() {
+				var page = window.DWMDocsModal ? window.DWMDocsModal.currentPage : null;
+				if ( page ) {
+					setParams( { modal: 'docs', tab: page !== 'welcome' ? page : null, widget: null } );
+				}
+			}, 0 );
+		} );
+
+		// ── Clear params only on explicit user-close actions ──────────────────
+		// X button or overlay click — only for tracked modals
+		$( document ).on( 'click', '.dwm-modal-close, .dwm-modal-overlay', function() {
+			if ( isPageUnloading ) return;
+			var modalId = $( this ).closest( '.dwm-modal' ).attr( 'id' );
+			if ( isTrackedModalId( modalId ) ) {
+				cleanAllParams();
+			}
+		} );
+
+		// ESC key — only when the topmost active modal is tracked
+		$( document ).on( 'keydown', function( e ) {
+			if ( isPageUnloading || e.key !== 'Escape' ) return;
+			var $top = $( '.dwm-modal.active' ).last();
+			if ( $top.length && isTrackedModalId( $top.attr( 'id' ) ) ) {
+				cleanAllParams();
 			}
 		} );
 

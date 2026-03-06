@@ -482,10 +482,415 @@ class DWM_Sanitizer {
 			$sanitized['excluded_tables'] = implode( "\n", $tables );
 		}
 
-		foreach ( array( 'hide_help_dropdown', 'hide_screen_options' ) as $key ) {
+		foreach ( array( 'hide_help_dropdown', 'hide_screen_options', 'dashboard_branding_enabled', 'dashboard_logo_enabled', 'dashboard_logo_link_enabled', 'dashboard_logo_link_new_tab', 'dashboard_background_enabled', 'dashboard_padding_enabled', 'dashboard_padding_linked', 'dashboard_hero_enabled', 'dashboard_notice_enabled', 'dashboard_notice_dismissible' ) as $key ) {
 			if ( array_key_exists( $key, $settings ) ) {
 				$sanitized[ $key ] = absint( $settings[ $key ] ) ? 1 : 0;
 			}
+		}
+
+		if ( isset( $settings['dashboard_background_type'] ) ) {
+			$type = sanitize_key( (string) $settings['dashboard_background_type'] );
+			$sanitized['dashboard_background_type'] = in_array( $type, array( 'default', 'solid', 'gradient' ), true ) ? $type : 'default';
+		}
+
+		if ( isset( $settings['dashboard_bg_solid_color'] ) ) {
+			$sanitized['dashboard_bg_solid_color'] = sanitize_hex_color( $settings['dashboard_bg_solid_color'] ) ?: '#ffffff';
+		}
+
+		if ( isset( $settings['dashboard_bg_gradient_type'] ) ) {
+			$type = sanitize_key( (string) $settings['dashboard_bg_gradient_type'] );
+			$sanitized['dashboard_bg_gradient_type'] = in_array( $type, array( 'linear', 'radial' ), true ) ? $type : 'linear';
+		}
+
+		if ( isset( $settings['dashboard_bg_gradient_angle'] ) ) {
+			$angle = (int) $settings['dashboard_bg_gradient_angle'];
+			$angle = max( 0, min( 360, $angle ) );
+			$sanitized['dashboard_bg_gradient_angle'] = $angle;
+		}
+
+		if ( isset( $settings['dashboard_bg_gradient_start'] ) ) {
+			$sanitized['dashboard_bg_gradient_start'] = sanitize_hex_color( $settings['dashboard_bg_gradient_start'] ) ?: '#667eea';
+		}
+
+		if ( isset( $settings['dashboard_bg_gradient_end'] ) ) {
+			$sanitized['dashboard_bg_gradient_end'] = sanitize_hex_color( $settings['dashboard_bg_gradient_end'] ) ?: '#764ba2';
+		}
+
+		if ( isset( $settings['dashboard_bg_gradient_start_position'] ) ) {
+			$pos = absint( $settings['dashboard_bg_gradient_start_position'] );
+			$sanitized['dashboard_bg_gradient_start_position'] = max( 0, min( 100, $pos ) );
+		}
+
+		if ( isset( $settings['dashboard_bg_gradient_end_position'] ) ) {
+			$pos = absint( $settings['dashboard_bg_gradient_end_position'] );
+			$sanitized['dashboard_bg_gradient_end_position'] = max( 0, min( 100, $pos ) );
+		}
+
+		foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+			$value_key = 'dashboard_padding_' . $side . '_value';
+			$unit_key  = 'dashboard_padding_' . $side . '_unit';
+
+			if ( isset( $settings[ $value_key ] ) ) {
+				$value = (float) $settings[ $value_key ];
+				$value = max( 0, min( 300, $value ) );
+				$sanitized[ $value_key ] = $value;
+			}
+
+			if ( isset( $settings[ $unit_key ] ) ) {
+				$unit = sanitize_key( (string) $settings[ $unit_key ] );
+				$sanitized[ $unit_key ] = in_array( $unit, array( 'px', '%', 'rem', 'em', 'vh', 'vw' ), true ) ? $unit : 'px';
+			}
+		}
+
+		if ( isset( $settings['dashboard_logo_url'] ) ) {
+			$sanitized['dashboard_logo_url'] = esc_url_raw( (string) $settings['dashboard_logo_url'] );
+		}
+
+		if ( isset( $settings['dashboard_logo_height'] ) ) {
+			$height = absint( $settings['dashboard_logo_height'] );
+			$sanitized['dashboard_logo_height'] = max( 1, min( 500, $height ) );
+		}
+
+		if ( isset( $settings['dashboard_logo_height_unit'] ) ) {
+			$unit = sanitize_key( (string) $settings['dashboard_logo_height_unit'] );
+			$sanitized['dashboard_logo_height_unit'] = in_array( $unit, array( 'px', '%', 'rem', 'em', 'vh' ), true ) ? $unit : 'px';
+		}
+
+		if ( isset( $settings['dashboard_logo_alignment'] ) ) {
+			$align = sanitize_key( (string) $settings['dashboard_logo_alignment'] );
+			$sanitized['dashboard_logo_alignment'] = in_array( $align, array( 'left', 'center', 'right' ), true ) ? $align : 'left';
+		}
+
+		if ( isset( $settings['dashboard_logo_link_url'] ) ) {
+			$sanitized['dashboard_logo_link_url'] = esc_url_raw( (string) $settings['dashboard_logo_link_url'] );
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_type'] ) ) {
+			$type = sanitize_key( (string) $settings['dashboard_logo_bg_type'] );
+			$sanitized['dashboard_logo_bg_type'] = in_array( $type, array( 'default', 'solid', 'gradient' ), true ) ? $type : 'default';
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_solid_color'] ) ) {
+			$sanitized['dashboard_logo_bg_solid_color'] = sanitize_hex_color( $settings['dashboard_logo_bg_solid_color'] ) ?: '#ffffff';
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_gradient_type'] ) ) {
+			$type = sanitize_key( (string) $settings['dashboard_logo_bg_gradient_type'] );
+			$sanitized['dashboard_logo_bg_gradient_type'] = in_array( $type, array( 'linear', 'radial' ), true ) ? $type : 'linear';
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_gradient_angle'] ) ) {
+			$sanitized['dashboard_logo_bg_gradient_angle'] = max( 0, min( 360, (int) $settings['dashboard_logo_bg_gradient_angle'] ) );
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_gradient_start'] ) ) {
+			$sanitized['dashboard_logo_bg_gradient_start'] = sanitize_hex_color( $settings['dashboard_logo_bg_gradient_start'] ) ?: '#667eea';
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_gradient_start_position'] ) ) {
+			$sanitized['dashboard_logo_bg_gradient_start_position'] = max( 0, min( 100, absint( $settings['dashboard_logo_bg_gradient_start_position'] ) ) );
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_gradient_end'] ) ) {
+			$sanitized['dashboard_logo_bg_gradient_end'] = sanitize_hex_color( $settings['dashboard_logo_bg_gradient_end'] ) ?: '#764ba2';
+		}
+
+		if ( isset( $settings['dashboard_logo_bg_gradient_end_position'] ) ) {
+			$sanitized['dashboard_logo_bg_gradient_end_position'] = max( 0, min( 100, absint( $settings['dashboard_logo_bg_gradient_end_position'] ) ) );
+		}
+
+		$logo_spacing_units = array( 'px', '%', 'rem', 'em' );
+		foreach ( array( 'padding', 'margin' ) as $prop ) {
+			foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+				$key = 'dashboard_logo_' . $prop . '_' . $side;
+				if ( isset( $settings[ $key ] ) ) {
+					$val = (int) $settings[ $key ];
+					if ( 'margin' === $prop ) {
+						$val = max( -200, min( 200, $val ) );
+					} else {
+						$val = max( 0, min( 200, $val ) );
+					}
+					$sanitized[ $key ] = $val;
+				}
+			}
+			$unit_key = 'dashboard_logo_' . $prop . '_unit';
+			if ( isset( $settings[ $unit_key ] ) ) {
+				$unit = sanitize_key( (string) $settings[ $unit_key ] );
+				$sanitized[ $unit_key ] = in_array( $unit, $logo_spacing_units, true ) ? $unit : 'px';
+			}
+			$linked_key = 'dashboard_logo_' . $prop . '_linked';
+			if ( array_key_exists( $linked_key, $settings ) ) {
+				$sanitized[ $linked_key ] = absint( $settings[ $linked_key ] ) ? 1 : 0;
+			}
+		}
+
+		$border_units = array( 'px', 'rem', 'em' );
+		foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+			$key = 'dashboard_logo_border_' . $side;
+			if ( isset( $settings[ $key ] ) ) {
+				$sanitized[ $key ] = max( 0, min( 20, absint( $settings[ $key ] ) ) );
+			}
+		}
+		if ( isset( $settings['dashboard_logo_border_unit'] ) ) {
+			$unit = sanitize_key( (string) $settings['dashboard_logo_border_unit'] );
+			$sanitized['dashboard_logo_border_unit'] = in_array( $unit, $border_units, true ) ? $unit : 'px';
+		}
+		if ( array_key_exists( 'dashboard_logo_border_linked', $settings ) ) {
+			$sanitized['dashboard_logo_border_linked'] = absint( $settings['dashboard_logo_border_linked'] ) ? 1 : 0;
+		}
+
+		if ( isset( $settings['dashboard_logo_border_style'] ) ) {
+			$style = sanitize_key( (string) $settings['dashboard_logo_border_style'] );
+			$sanitized['dashboard_logo_border_style'] = in_array( $style, array( 'none', 'solid', 'dashed', 'dotted', 'double' ), true ) ? $style : 'none';
+		}
+
+		if ( isset( $settings['dashboard_logo_border_color'] ) ) {
+			$sanitized['dashboard_logo_border_color'] = sanitize_hex_color( $settings['dashboard_logo_border_color'] ) ?: '#dddddd';
+		}
+
+		$radius_units = array( 'px', '%', 'rem', 'em' );
+		foreach ( array( 'tl', 'tr', 'br', 'bl' ) as $corner ) {
+			$key = 'dashboard_logo_border_radius_' . $corner;
+			if ( isset( $settings[ $key ] ) ) {
+				$sanitized[ $key ] = max( 0, min( 200, absint( $settings[ $key ] ) ) );
+			}
+		}
+		if ( isset( $settings['dashboard_logo_border_radius_unit'] ) ) {
+			$unit = sanitize_key( (string) $settings['dashboard_logo_border_radius_unit'] );
+			$sanitized['dashboard_logo_border_radius_unit'] = in_array( $unit, $radius_units, true ) ? $unit : 'px';
+		}
+		if ( array_key_exists( 'dashboard_logo_border_radius_linked', $settings ) ) {
+			$sanitized['dashboard_logo_border_radius_linked'] = absint( $settings['dashboard_logo_border_radius_linked'] ) ? 1 : 0;
+		}
+
+		if ( isset( $settings['dashboard_title_mode'] ) ) {
+			$mode = sanitize_key( (string) $settings['dashboard_title_mode'] );
+			$sanitized['dashboard_title_mode'] = in_array( $mode, array( 'default', 'hide', 'custom' ), true ) ? $mode : 'default';
+		}
+
+		if ( isset( $settings['dashboard_title_text'] ) ) {
+			$sanitized['dashboard_title_text'] = sanitize_text_field( (string) $settings['dashboard_title_text'] );
+		}
+
+		if ( isset( $settings['dashboard_title_font_family'] ) ) {
+			$sanitized['dashboard_title_font_family'] = sanitize_text_field( (string) $settings['dashboard_title_font_family'] );
+		}
+
+		if ( isset( $settings['dashboard_title_font_size'] ) ) {
+			$size = sanitize_text_field( (string) $settings['dashboard_title_font_size'] );
+			if ( preg_match( '/^\d+(?:\.\d+)?(px|rem|em)$/', $size ) ) {
+				$sanitized['dashboard_title_font_size'] = $size;
+			} else {
+				$sanitized['dashboard_title_font_size'] = '32px';
+			}
+		}
+
+		if ( isset( $settings['dashboard_title_font_weight'] ) ) {
+			$weight = sanitize_text_field( (string) $settings['dashboard_title_font_weight'] );
+			$sanitized['dashboard_title_font_weight'] = in_array( $weight, array( '300', '400', '500', '600', '700' ), true ) ? $weight : '700';
+		}
+
+		if ( isset( $settings['dashboard_title_alignment'] ) ) {
+			$align = sanitize_key( (string) $settings['dashboard_title_alignment'] );
+			$sanitized['dashboard_title_alignment'] = in_array( $align, array( 'left', 'center', 'right' ), true ) ? $align : 'left';
+		}
+
+		if ( isset( $settings['dashboard_title_color'] ) ) {
+			$sanitized['dashboard_title_color'] = sanitize_text_field( (string) $settings['dashboard_title_color'] );
+		}
+
+		if ( isset( $settings['dashboard_hero_title'] ) ) {
+			$sanitized['dashboard_hero_title'] = sanitize_text_field( (string) $settings['dashboard_hero_title'] );
+		}
+
+		if ( isset( $settings['dashboard_hero_theme'] ) ) {
+			$theme = sanitize_key( (string) $settings['dashboard_hero_theme'] );
+			if ( 'classic' === $theme ) {
+				$theme = 'text-left';
+			}
+			$sanitized['dashboard_hero_theme'] = in_array( $theme, array( 'text-left', 'text-center', 'text-right', 'text-split', 'logo-left', 'logo-top', 'logo-right', 'split' ), true ) ? $theme : 'text-left';
+		}
+
+		if ( isset( $settings['dashboard_hero_title_font_family'] ) ) {
+			$sanitized['dashboard_hero_title_font_family'] = sanitize_text_field( (string) $settings['dashboard_hero_title_font_family'] );
+		}
+
+		if ( isset( $settings['dashboard_hero_title_font_size'] ) ) {
+			$size = sanitize_text_field( (string) $settings['dashboard_hero_title_font_size'] );
+			if ( preg_match( '/^\d+(?:\.\d+)?(px|rem|em)$/', $size ) ) {
+				$sanitized['dashboard_hero_title_font_size'] = $size;
+			} else {
+				$sanitized['dashboard_hero_title_font_size'] = '28px';
+			}
+		}
+
+		if ( isset( $settings['dashboard_hero_title_font_weight'] ) ) {
+			$weight = sanitize_text_field( (string) $settings['dashboard_hero_title_font_weight'] );
+			$sanitized['dashboard_hero_title_font_weight'] = in_array( $weight, array( '300', '400', '500', '600', '700' ), true ) ? $weight : '700';
+		}
+
+		if ( isset( $settings['dashboard_hero_title_alignment'] ) ) {
+			$align = sanitize_key( (string) $settings['dashboard_hero_title_alignment'] );
+			$sanitized['dashboard_hero_title_alignment'] = in_array( $align, array( 'left', 'center', 'right' ), true ) ? $align : 'left';
+		}
+
+		if ( isset( $settings['dashboard_hero_title_color'] ) ) {
+			$sanitized['dashboard_hero_title_color'] = sanitize_text_field( (string) $settings['dashboard_hero_title_color'] );
+		}
+
+		if ( isset( $settings['dashboard_hero_message'] ) ) {
+			$sanitized['dashboard_hero_message'] = wp_kses_post( (string) $settings['dashboard_hero_message'] );
+		}
+
+		if ( isset( $settings['dashboard_hero_background_type'] ) ) {
+			$type = sanitize_key( (string) $settings['dashboard_hero_background_type'] );
+			$sanitized['dashboard_hero_background_type'] = in_array( $type, array( 'solid', 'gradient' ), true ) ? $type : 'solid';
+		}
+
+		if ( isset( $settings['dashboard_hero_bg_solid_color'] ) ) {
+			$sanitized['dashboard_hero_bg_solid_color'] = sanitize_hex_color( $settings['dashboard_hero_bg_solid_color'] ) ?: '#667eea';
+		}
+
+		if ( isset( $settings['dashboard_hero_bg_gradient_type'] ) ) {
+			$type = sanitize_key( (string) $settings['dashboard_hero_bg_gradient_type'] );
+			$sanitized['dashboard_hero_bg_gradient_type'] = in_array( $type, array( 'linear', 'radial' ), true ) ? $type : 'linear';
+		}
+
+		if ( isset( $settings['dashboard_hero_bg_gradient_angle'] ) ) {
+			$angle = (int) $settings['dashboard_hero_bg_gradient_angle'];
+			$angle = max( 0, min( 360, $angle ) );
+			$sanitized['dashboard_hero_bg_gradient_angle'] = $angle;
+		}
+
+		if ( isset( $settings['dashboard_hero_bg_gradient_start'] ) ) {
+			$sanitized['dashboard_hero_bg_gradient_start'] = sanitize_hex_color( $settings['dashboard_hero_bg_gradient_start'] ) ?: '#667eea';
+		}
+
+		if ( isset( $settings['dashboard_hero_bg_gradient_end'] ) ) {
+			$sanitized['dashboard_hero_bg_gradient_end'] = sanitize_hex_color( $settings['dashboard_hero_bg_gradient_end'] ) ?: '#764ba2';
+		}
+
+		if ( isset( $settings['dashboard_hero_bg_gradient_start_position'] ) ) {
+			$pos = absint( $settings['dashboard_hero_bg_gradient_start_position'] );
+			$sanitized['dashboard_hero_bg_gradient_start_position'] = max( 0, min( 100, $pos ) );
+		}
+
+		if ( isset( $settings['dashboard_hero_bg_gradient_end_position'] ) ) {
+			$pos = absint( $settings['dashboard_hero_bg_gradient_end_position'] );
+			$sanitized['dashboard_hero_bg_gradient_end_position'] = max( 0, min( 100, $pos ) );
+		}
+
+		// Hero spacing (padding / margin).
+		$hero_spacing_units = array( 'px', '%', 'rem', 'em' );
+		foreach ( array( 'padding', 'margin' ) as $prop ) {
+			foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+				$key = 'dashboard_hero_' . $prop . '_' . $side;
+				if ( isset( $settings[ $key ] ) ) {
+					$val = (int) $settings[ $key ];
+					if ( 'margin' === $prop ) {
+						$val = max( -200, min( 200, $val ) );
+					} else {
+						$val = max( 0, min( 200, $val ) );
+					}
+					$sanitized[ $key ] = $val;
+				}
+			}
+			$unit_key = 'dashboard_hero_' . $prop . '_unit';
+			if ( isset( $settings[ $unit_key ] ) ) {
+				$unit = sanitize_key( (string) $settings[ $unit_key ] );
+				$sanitized[ $unit_key ] = in_array( $unit, $hero_spacing_units, true ) ? $unit : 'px';
+			}
+			$linked_key = 'dashboard_hero_' . $prop . '_linked';
+			if ( array_key_exists( $linked_key, $settings ) ) {
+				$sanitized[ $linked_key ] = absint( $settings[ $linked_key ] ) ? 1 : 0;
+			}
+		}
+
+		// Hero border.
+		$hero_border_units = array( 'px', 'rem', 'em' );
+		foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+			$key = 'dashboard_hero_border_' . $side;
+			if ( isset( $settings[ $key ] ) ) {
+				$sanitized[ $key ] = max( 0, min( 20, absint( $settings[ $key ] ) ) );
+			}
+		}
+		if ( isset( $settings['dashboard_hero_border_unit'] ) ) {
+			$unit = sanitize_key( (string) $settings['dashboard_hero_border_unit'] );
+			$sanitized['dashboard_hero_border_unit'] = in_array( $unit, $hero_border_units, true ) ? $unit : 'px';
+		}
+		if ( array_key_exists( 'dashboard_hero_border_linked', $settings ) ) {
+			$sanitized['dashboard_hero_border_linked'] = absint( $settings['dashboard_hero_border_linked'] ) ? 1 : 0;
+		}
+		if ( isset( $settings['dashboard_hero_border_style'] ) ) {
+			$style = sanitize_key( (string) $settings['dashboard_hero_border_style'] );
+			$sanitized['dashboard_hero_border_style'] = in_array( $style, array( 'none', 'solid', 'dashed', 'dotted', 'double' ), true ) ? $style : 'none';
+		}
+		if ( isset( $settings['dashboard_hero_border_color'] ) ) {
+			$sanitized['dashboard_hero_border_color'] = sanitize_hex_color( $settings['dashboard_hero_border_color'] ) ?: '#dddddd';
+		}
+
+		// Hero border radius.
+		$hero_radius_units = array( 'px', '%', 'rem', 'em' );
+		foreach ( array( 'tl', 'tr', 'br', 'bl' ) as $corner ) {
+			$key = 'dashboard_hero_border_radius_' . $corner;
+			if ( isset( $settings[ $key ] ) ) {
+				$sanitized[ $key ] = max( 0, min( 200, absint( $settings[ $key ] ) ) );
+			}
+		}
+		if ( isset( $settings['dashboard_hero_border_radius_unit'] ) ) {
+			$unit = sanitize_key( (string) $settings['dashboard_hero_border_radius_unit'] );
+			$sanitized['dashboard_hero_border_radius_unit'] = in_array( $unit, $hero_radius_units, true ) ? $unit : 'px';
+		}
+		if ( array_key_exists( 'dashboard_hero_border_radius_linked', $settings ) ) {
+			$sanitized['dashboard_hero_border_radius_linked'] = absint( $settings['dashboard_hero_border_radius_linked'] ) ? 1 : 0;
+		}
+
+		// Hero height / min-height.
+		foreach ( array( 'dashboard_hero_height', 'dashboard_hero_min_height' ) as $dim_key ) {
+			if ( isset( $settings[ $dim_key ] ) ) {
+				$sanitized[ $dim_key ] = max( 0, min( 1000, absint( $settings[ $dim_key ] ) ) );
+			}
+			$dim_unit_key = $dim_key . '_unit';
+			if ( isset( $settings[ $dim_unit_key ] ) ) {
+				$unit = sanitize_key( (string) $settings[ $dim_unit_key ] );
+				$sanitized[ $dim_unit_key ] = in_array( $unit, array( 'px', '%', 'rem', 'em', 'vh' ), true ) ? $unit : 'px';
+			}
+		}
+
+		if ( isset( $settings['dashboard_notice_type'] ) ) {
+			$type = sanitize_key( (string) $settings['dashboard_notice_type'] );
+			$sanitized['dashboard_notice_type'] = in_array( $type, array( 'toast', 'popup', 'alert' ), true ) ? $type : 'toast';
+		}
+
+		if ( isset( $settings['dashboard_notice_level'] ) ) {
+			$level = sanitize_key( (string) $settings['dashboard_notice_level'] );
+			$sanitized['dashboard_notice_level'] = in_array( $level, array( 'info', 'success', 'warning', 'error' ), true ) ? $level : 'info';
+		}
+
+		if ( isset( $settings['dashboard_notice_title'] ) ) {
+			$sanitized['dashboard_notice_title'] = sanitize_text_field( (string) $settings['dashboard_notice_title'] );
+		}
+
+		if ( isset( $settings['dashboard_notice_message'] ) ) {
+			$sanitized['dashboard_notice_message'] = sanitize_textarea_field( (string) $settings['dashboard_notice_message'] );
+		}
+
+		if ( array_key_exists( 'dashboard_notice_dismissible', $settings ) ) {
+			$sanitized['dashboard_notice_dismissible'] = absint( $settings['dashboard_notice_dismissible'] ) ? 1 : 0;
+		}
+
+		if ( isset( $settings['dashboard_notice_auto_dismiss'] ) ) {
+			$sanitized['dashboard_notice_auto_dismiss'] = max( 0, min( 60, (int) $settings['dashboard_notice_auto_dismiss'] ) );
+		}
+
+		if ( isset( $settings['dashboard_notice_position'] ) ) {
+			$pos = sanitize_key( (string) $settings['dashboard_notice_position'] );
+			$sanitized['dashboard_notice_position'] = in_array( $pos, array( 'bottom-right', 'bottom-left', 'top-right', 'top-left' ), true ) ? $pos : 'bottom-right';
+		}
+
+		if ( isset( $settings['dashboard_notice_frequency'] ) ) {
+			$freq = sanitize_key( (string) $settings['dashboard_notice_frequency'] );
+			$sanitized['dashboard_notice_frequency'] = in_array( $freq, array( 'always', 'once-session', 'once-day' ), true ) ? $freq : 'always';
 		}
 
 		if ( isset( $settings['hidden_dashboard_widgets'] ) ) {
@@ -495,6 +900,33 @@ class DWM_Sanitizer {
 			$valid_ids    = array( 'welcome-panel', 'dashboard_activity', 'dashboard_right_now', 'dashboard_quick_press', 'dashboard_site_health', 'dashboard_primary' );
 			$widget_ids   = array_values( array_intersect( $widget_ids, $valid_ids ) );
 			$sanitized['hidden_dashboard_widgets'] = implode( "\n", $widget_ids );
+		}
+
+		if ( isset( $settings['hidden_third_party_dashboard_widgets'] ) ) {
+			$widget_ids = explode( "\n", $settings['hidden_third_party_dashboard_widgets'] );
+			$widget_ids = array_map( 'trim', $widget_ids );
+			$widget_ids = array_filter( $widget_ids );
+			$widget_ids = array_map( 'sanitize_key', $widget_ids );
+			$widget_ids = array_values( array_unique( array_filter( $widget_ids ) ) );
+			$sanitized['hidden_third_party_dashboard_widgets'] = implode( "\n", $widget_ids );
+		}
+
+		if ( isset( $settings['access_allowed_roles'] ) ) {
+			$roles      = explode( "\n", (string) $settings['access_allowed_roles'] );
+			$roles      = array_map( 'trim', $roles );
+			$roles      = array_map( 'sanitize_key', $roles );
+			$roles      = array_values( array_unique( array_filter( $roles ) ) );
+			$valid_keys = DWM_Access_Control::get_all_role_keys();
+			$roles      = array_values( array_intersect( $roles, $valid_keys ) );
+			$sanitized['access_allowed_roles'] = implode( "\n", $roles );
+		}
+
+		if ( isset( $settings['restricted_user_ids'] ) ) {
+			$user_ids = explode( "\n", (string) $settings['restricted_user_ids'] );
+			$user_ids = array_map( 'trim', $user_ids );
+			$user_ids = array_map( 'absint', $user_ids );
+			$user_ids = array_values( array_unique( array_filter( $user_ids ) ) );
+			$sanitized['restricted_user_ids'] = implode( "\n", $user_ids );
 		}
 
 		return $sanitized;

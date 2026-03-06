@@ -237,6 +237,10 @@ import { dwmConfirm } from '../partials/dialog.js';
 					if ( itemStatus === 'archived' || itemStatus === 'trash' ) {
 						visible = false;
 					}
+				} else if ( statusFilter === 'demo' ) {
+					if ( $item.attr('data-is-demo') !== '1' ) {
+						visible = false;
+					}
 				} else if ( statusFilter !== itemStatus ) {
 					visible = false;
 				}

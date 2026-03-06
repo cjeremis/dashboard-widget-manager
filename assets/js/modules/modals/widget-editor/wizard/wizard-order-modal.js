@@ -12,7 +12,9 @@
 import { wizardState } from './wizard-state.js';
 import { escAttr, buildOrderColumnOptions } from './wizard-utils.js';
 import { ajax } from '../../../partials/ajax.js';
+import { ensureSearchableSelect, refreshSearchableSelect } from '../../../partials/searchable-select.js';
 import * as stepOrder from './wizard-steps/wizard-step-order.js';
+import { buildNoResultsPreviewHtml } from '../output-preview-empty-state.js';
 
 const $ = jQuery;
 
@@ -33,6 +35,8 @@ export function openOrderConfigModal( editIndex ) {
 	// Populate column dropdown
 	const $columnSelect = $( '#dwm-order-config-column' );
 	$columnSelect.html( buildOrderColumnOptions( '' ) );
+	ensureSearchableSelect( '#dwm-order-config-column', 'Search columns...' );
+	refreshSearchableSelect( '#dwm-order-config-column' );
 
 	// If editing, populate with existing values
 	if ( editIndex !== null && wizardState.data.orders[ editIndex ] ) {
@@ -186,7 +190,7 @@ export function renderOrderOutputPreview() {
 	const results = wizardState.orderConfigState.validationResults || [];
 
 	if ( results.length === 0 ) {
-		$container.html( '<p class="dwm-output-empty">No results returned.</p>' );
+		$container.html( buildNoResultsPreviewHtml() );
 		return;
 	}
 

@@ -44,7 +44,15 @@ trait DWM_AJAX_Handler {
 	 * @return bool True if user has capability, false otherwise.
 	 */
 	protected function validate_capability( $capability = 'manage_options' ) {
-		return current_user_can( $capability );
+		if ( ! current_user_can( $capability ) ) {
+			return false;
+		}
+
+		if ( class_exists( 'DWM_Access_Control' ) && ! DWM_Access_Control::current_user_can_access_plugin() ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**

@@ -7,6 +7,7 @@
  * @since 1.0.0
  */
 
+import { buildNoResultsPreviewHtml } from './widget-editor/output-preview-empty-state.js';
 const $ = jQuery;
 
 let previewQuery = '';
@@ -118,7 +119,7 @@ function loadPreviewOutput() {
 		function( data ) {
 			const results = data.results || [];
 			if ( results.length === 0 ) {
-				$content.html( '<p class="dwm-output-empty">No results returned.</p>' );
+				$content.html( buildNoResultsPreviewHtml() );
 				return;
 			}
 			const headers = Object.keys( results[ 0 ] );

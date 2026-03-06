@@ -93,13 +93,16 @@ class DWM_Widget_Renderer {
 
 			echo $output;
 
-			$edit_url = admin_url( 'admin.php?page=dashboard-widget-manager&edit=' . $widget['id'] );
+			$can_edit_widgets = current_user_can( 'manage_options' ) && DWM_Access_Control::current_user_can_access_plugin();
+			$edit_url         = admin_url( 'admin.php?page=dashboard-widget-manager&edit=' . $widget['id'] );
 			echo '<div class="dwm-widget-footer">';
 			echo '<div class="dwm-widget-footer-left"></div>';
 			echo '<div class="dwm-widget-footer-right">';
-			echo '<a href="' . esc_url( $edit_url ) . '" class="dwm-widget-edit-btn" title="' . esc_attr__( 'Edit widget', 'dashboard-widget-manager' ) . '">';
-			echo '<span class="dashicons dashicons-edit"></span>';
-			echo '</a>';
+			if ( $can_edit_widgets ) {
+				echo '<a href="' . esc_url( $edit_url ) . '" class="dwm-widget-edit-btn" title="' . esc_attr__( 'Edit widget', 'dashboard-widget-manager' ) . '">';
+				echo '<span class="dashicons dashicons-edit"></span>';
+				echo '</a>';
+			}
 			echo '</div>';
 			echo '</div>';
 
@@ -176,7 +179,8 @@ class DWM_Widget_Renderer {
 		}
 
 		// Footer: help icon (left) | edit + refresh (right).
-		$edit_url = admin_url( 'admin.php?page=dashboard-widget-manager&edit=' . $widget['id'] );
+		$can_edit_widgets = current_user_can( 'manage_options' ) && DWM_Access_Control::current_user_can_access_plugin();
+		$edit_url         = admin_url( 'admin.php?page=dashboard-widget-manager&edit=' . $widget['id'] );
 		echo '<div class="dwm-widget-footer">';
 
 		echo '<div class="dwm-widget-footer-left">';
@@ -189,9 +193,11 @@ class DWM_Widget_Renderer {
 		echo '</div>';
 
 		echo '<div class="dwm-widget-footer-right">';
-		echo '<a href="' . esc_url( $edit_url ) . '" class="dwm-widget-edit-btn" title="' . esc_attr__( 'Edit widget', 'dashboard-widget-manager' ) . '">';
-		echo '<span class="dashicons dashicons-edit"></span>';
-		echo '</a>';
+		if ( $can_edit_widgets ) {
+			echo '<a href="' . esc_url( $edit_url ) . '" class="dwm-widget-edit-btn" title="' . esc_attr__( 'Edit widget', 'dashboard-widget-manager' ) . '">';
+			echo '<span class="dashicons dashicons-edit"></span>';
+			echo '</a>';
+		}
 		if ( $auto_refresh ) {
 			echo '<span class="dwm-auto-refresh-badge" title="' . esc_attr__( 'This widget automatically refreshes when data changes', 'dashboard-widget-manager' ) . '">';
 			echo '<span class="dashicons dashicons-update"></span> ' . esc_html__( 'Auto-refresh on data change', 'dashboard-widget-manager' );

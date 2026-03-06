@@ -348,9 +348,17 @@ class DWM_Widget_Manager {
 		$renderer->render_widget( $widget_id, true );
 		$output = ob_get_clean();
 
+		// Also return the raw SQL query for the SQL Query tab.
+		$data   = DWM_Data::get_instance();
+		$widget = $data->get_widget( $widget_id );
+		$query  = $widget ? ( $widget['sql_query'] ?? '' ) : '';
+
 		$this->send_success(
 			__( 'Preview generated successfully.', 'dashboard-widget-manager' ),
-			array( 'html' => $output )
+			array(
+				'html'  => $output,
+				'query' => $query,
+			)
 		);
 	}
 
@@ -766,7 +774,7 @@ class DWM_Widget_Manager {
 			return;
 		}
 
-		$result = $data->update_widget_status( $widget_id, $new_status );
+		$result = $data->update_widget_status( $widget_id, $new_status, true );
 		if ( ! $result ) {
 			$this->send_error( __( 'Failed to update status.', 'dashboard-widget-manager' ), 500 );
 			return;

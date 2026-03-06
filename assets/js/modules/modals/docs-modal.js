@@ -2,7 +2,8 @@
  * Dashboard Widget Manager - Docs Modal Module
  *
  * Contains JavaScript behavior for the docs modal.
- * Handles accordion navigation, search, and page display.
+ * Handles accordion navigation, search, page display,
+ * maximize/restore, category badge, and prev/next navigation.
  *
  * @package Dashboard_Widget_Manager
  * @since 1.0.0
@@ -33,20 +34,216 @@
 			planFilterBtn: '[data-dwm-docs-plan-filter]',
 			soonToggle: '[data-dwm-docs-soon-toggle]',
 			sidebarToggle: '[data-dwm-docs-sidebar-toggle]',
-			layout: '.dwm-docs-layout'
+			layout: '.dwm-docs-layout',
+			stickyTitle: '[data-dwm-docs-sticky-title]',
+			stickyIcon: '[data-dwm-docs-sticky-icon]',
+			stickyBadge: '[data-dwm-docs-sticky-badge]',
+			pageNav: '[data-dwm-docs-page-nav]',
+			navButtons: '[data-dwm-docs-nav-direction]'
 		},
 
 		currentPage: 'welcome',
 		activePlan: 'all',
 		showSoon: true,
-		$collapsedSearch: null,
 		lastFocusedElement: null,
 
 		init: function() {
-			this.$collapsedSearch = $('<button type="button" class="dwm-docs-collapsed-search" aria-label="Search documentation"><span class="dashicons dashicons-search"></span></button>');
 			this.ensureSearchHint();
+			this.ensureMaximizeButton();
+			this.bindMaximizeEvents();
 			this.bindEvents();
 		},
+
+		// -------------------------------------------------------------------------
+		// Maximize button
+		// -------------------------------------------------------------------------
+
+		ensureMaximizeButton: function() {
+			var $modal = $(this.selectors.modal);
+			var $header = $modal.find('.dwm-modal-header');
+			var $closeBtn = $modal.find('.dwm-modal-close').first();
+			if (!$header.length || !$closeBtn.length || $header.find('.dwm-modal-maximize').length) {
+				return;
+			}
+			var $btn = $('<button type="button" class="dwm-modal-maximize" aria-label="Maximize docs modal" title="Maximize"><span class="dashicons dashicons-editor-expand" aria-hidden="true"></span></button>');
+			$btn.insertBefore($closeBtn);
+		},
+
+		syncMaximizeButtonState: function() {
+			var $modal = $(this.selectors.modal);
+			var $btn = $modal.find('.dwm-modal-maximize');
+			if (!$btn.length) { return; }
+			var isMaximized = $modal.hasClass('is-maximized');
+			$btn.find('.dashicons').attr('class', 'dashicons ' + (isMaximized ? 'dashicons-editor-contract' : 'dashicons-editor-expand'));
+			$btn.attr('aria-label', isMaximized ? 'Restore docs modal size' : 'Maximize docs modal');
+			$btn.attr('title', isMaximized ? 'Restore' : 'Maximize');
+		},
+
+		setMaximizedState: function(enabled) {
+			$(this.selectors.modal).toggleClass('is-maximized', !!enabled);
+			this.syncMaximizeButtonState();
+		},
+
+		bindMaximizeEvents: function() {
+			var self = this;
+			var $modal = $(this.selectors.modal);
+			if ($modal.data('dwm-maximize-bound')) { return; }
+			$modal.data('dwm-maximize-bound', true);
+			$modal.on('click', '.dwm-modal-maximize', function(e) {
+				e.preventDefault();
+				self.setMaximizedState(!$(self.selectors.modal).hasClass('is-maximized'));
+			});
+		},
+
+		// -------------------------------------------------------------------------
+		// Sticky header + prev/next nav
+		// -------------------------------------------------------------------------
+
+		getOrderedNavEntries: function() {
+			var entries = [];
+			var $modal = $(this.selectors.modal);
+
+			var $welcome = $modal.find(this.selectors.welcomeLink).first();
+			if ($welcome.length) {
+				entries.push({ pageId: 'welcome', $link: $welcome });
+			}
+
+			$modal.find(this.selectors.submenuLink).each(function() {
+				var pageId = $(this).data('docs-page');
+				if (pageId) {
+					entries.push({ pageId: pageId, $link: $(this) });
+				}
+			});
+
+			return entries;
+		},
+
+		getPageMeta: function($link, pageId) {
+			if (pageId === 'welcome') {
+				return { title: 'Welcome', iconClass: 'dashicons-book-alt', badgeText: '' };
+			}
+
+			var $page = $(this.selectors.modal).find('[data-docs-page-content="' + pageId + '"]').first();
+			var $titleWrapper = $page.find('.dwm-docs-section-title-wrapper').first();
+			var $title = $titleWrapper.find('.dwm-docs-section-title').first();
+			var $badge = $titleWrapper.find('.dwm-docs-page-title-badge, .dwm-docs-coming-badge, .dwm-docs-pro-badge').first();
+			var $pageIcon = $titleWrapper.find('.dwm-docs-title-icon, .dashicons').first();
+			var pageTitle = $title.text().trim();
+			var pageIconClass = '';
+			if ($pageIcon.length) {
+				pageIconClass = (($pageIcon.attr('class') || '').match(/dashicons-[\w-]+/) || [ '' ])[0];
+			}
+
+			var $accordionItem = $link.closest(this.selectors.accordionItem);
+			if ($accordionItem.length) {
+				var $trigger = $accordionItem.find(this.selectors.accordionTrigger).first();
+				var title = pageTitle || $trigger.find('.dwm-docs-accordion-trigger-text').clone().children().remove().end().text().trim();
+				var iconClass = 'dashicons-book-alt';
+				var $icon = $trigger.find('.dashicons').first();
+				if (pageIconClass) {
+					iconClass = pageIconClass;
+				} else if ($icon.length) {
+					var cls = $icon.attr('class') || '';
+					var match = cls.match(/dashicons-[\w-]+/);
+					if (match) { iconClass = match[0]; }
+				}
+				return {
+					title: title || 'Documentation',
+					iconClass: iconClass,
+					badgeText: $badge.text().trim()
+				};
+			}
+
+			return {
+				title: pageTitle || 'Documentation',
+				iconClass: pageIconClass || 'dashicons-book-alt',
+				badgeText: $badge.text().trim()
+			};
+		},
+
+		getMenuLabel: function($menuLink) {
+			if (!$menuLink || !$menuLink.length) {
+				return '';
+			}
+
+			var $clone = $menuLink.clone();
+			$clone.find('.dashicons, .dwm-docs-pro-badge, .dwm-docs-coming-badge, img').remove();
+			return $clone.text().replace(/\s+/g, ' ').trim();
+		},
+
+		updateStickyHeader: function(pageId) {
+			var $modal = $(this.selectors.modal);
+			var $activeLink = pageId === 'welcome'
+				? $modal.find(this.selectors.welcomeLink).first()
+				: $modal.find(this.selectors.submenuLink + '[data-docs-page="' + pageId + '"]').first();
+			var meta = this.getPageMeta($activeLink, pageId);
+			var $stickyIcon = $modal.find(this.selectors.stickyIcon);
+			var $stickyBadge = $modal.find(this.selectors.stickyBadge);
+
+			$modal.find(this.selectors.stickyTitle).text(meta.title || 'Documentation');
+			$stickyIcon.attr('class', meta.iconClass ? 'dwm-sidebar-modal-sticky-icon dashicons ' + meta.iconClass : 'dwm-sidebar-modal-sticky-icon dashicons dashicons-book-alt');
+
+			if (meta.badgeText) {
+				$stickyBadge.text(meta.badgeText).addClass('is-visible');
+			} else {
+				$stickyBadge.text('').removeClass('is-visible');
+			}
+		},
+
+		updatePageNavigation: function(pageId) {
+			var entries = this.getOrderedNavEntries();
+			var currentIndex = -1;
+			var i;
+
+			for (i = 0; i < entries.length; i++) {
+				if (entries[i].pageId === pageId) {
+					currentIndex = i;
+					break;
+				}
+			}
+
+			if (currentIndex === -1) {
+				currentIndex = 0;
+			}
+
+			var prevEntry = currentIndex > 0 ? entries[currentIndex - 1] : null;
+			var nextEntry = currentIndex < entries.length - 1 ? entries[currentIndex + 1] : null;
+			var $modal = $(this.selectors.modal);
+			var $prevBtn = $modal.find(this.selectors.navButtons + '.is-prev');
+			var $nextBtn = $modal.find(this.selectors.navButtons + '.is-next');
+			var prevLabel = prevEntry ? this.getMenuLabel(prevEntry.$link) : '';
+			var nextLabel = nextEntry ? this.getMenuLabel(nextEntry.$link) : '';
+
+			$prevBtn.find('[data-dwm-docs-prev-label]').text(prevLabel ? 'Prev: ' + prevLabel : 'Prev');
+			$nextBtn.find('[data-dwm-docs-next-label]').text(nextLabel ? 'Next: ' + nextLabel : 'Next');
+			$prevBtn.attr('aria-label', prevLabel ? 'Previous: ' + prevLabel : 'Previous');
+			$nextBtn.attr('aria-label', nextLabel ? 'Next: ' + nextLabel : 'Next');
+			$prevBtn.attr('data-docs-nav-target', prevEntry ? prevEntry.pageId : '');
+			$nextBtn.attr('data-docs-nav-target', nextEntry ? nextEntry.pageId : '');
+			$prevBtn.prop('disabled', !prevEntry).toggle(!!prevEntry);
+			$nextBtn.prop('disabled', !nextEntry).toggle(!!nextEntry);
+		},
+
+		toggleSidebar: function() {
+			var $layout = $(this.selectors.modal).find(this.selectors.layout);
+			$layout.toggleClass('is-sidebar-collapsed');
+			sessionStorage.setItem('dwm_docs_sidebar_collapsed', $layout.hasClass('is-sidebar-collapsed') ? '1' : '0');
+		},
+
+		restoreSidebarState: function() {
+			var $layout = $(this.selectors.modal).find(this.selectors.layout);
+			var isCollapsed = sessionStorage.getItem('dwm_docs_sidebar_collapsed') === '1';
+
+			$layout.toggleClass('is-sidebar-collapsed', isCollapsed);
+
+			if (window.innerWidth <= 782) {
+				$layout.addClass('is-sidebar-collapsed');
+			}
+		},
+
+		// -------------------------------------------------------------------------
+		// Events
+		// -------------------------------------------------------------------------
 
 		ensureSearchHint: function() {
 			var $searchWrap = $(this.selectors.modal).find('.dwm-docs-search').first();
@@ -66,7 +263,7 @@
 				self.toggleAccordion($(this));
 			});
 
-			// Page navigation (scoped to inside the modal to avoid matching external help-icon triggers)
+			// Page navigation (scoped to inside the modal)
 			$(document).on('click', self.selectors.modal + ' ' + self.selectors.pageLink, function(e) {
 				e.preventDefault();
 				var page = $(this).data('docs-page');
@@ -75,6 +272,17 @@
 					var $sidebarLink = $(self.selectors.modal + ' ' + self.selectors.submenuLink + '[data-docs-page="' + page + '"]').first();
 					self.setActiveLink($sidebarLink.length ? $sidebarLink : $(this));
 				}
+			});
+
+			// Header tools prev/next nav
+			$(document).on('click', self.selectors.modal + ' ' + self.selectors.navButtons + '[data-docs-nav-target]', function(e) {
+				e.preventDefault();
+				var targetPageId = $(this).attr('data-docs-nav-target');
+				if (!targetPageId) { return; }
+				var $sidebarLink = $(self.selectors.modal + ' ' + self.selectors.submenuLink + '[data-docs-page="' + targetPageId + '"]').first();
+				var $welcomeLink = $(self.selectors.modal + ' ' + self.selectors.welcomeLink).first();
+				self.showPage(targetPageId);
+				self.setActiveLink($sidebarLink.length ? $sidebarLink : (targetPageId === 'welcome' ? $welcomeLink : $sidebarLink));
 			});
 
 			// Search with debounce
@@ -113,19 +321,20 @@
 			// Sidebar collapse toggle
 			$(document).on('click', self.selectors.modal + ' ' + self.selectors.sidebarToggle, function(e) {
 				e.preventDefault();
-				$(self.selectors.modal).find(self.selectors.layout).toggleClass('is-sidebar-collapsed');
+				self.toggleSidebar();
 			});
 
 			// Collapsed search button — expand sidebar and focus search
 			$(document).on('click', self.selectors.modal + ' .dwm-docs-collapsed-search', function(e) {
 				e.preventDefault();
 				$(self.selectors.modal).find(self.selectors.layout).removeClass('is-sidebar-collapsed');
+				sessionStorage.setItem('dwm_docs_sidebar_collapsed', '0');
 				setTimeout(function() {
 					$(self.selectors.modal).find(self.selectors.searchInput).focus();
 				}, 350);
 			});
 
-			// Open docs modal from any trigger (help icons, toolbar buttons, etc.)
+			// Open docs modal from any trigger
 			$(document).on('click', '[data-open-modal="dwm-docs-modal"]', function(e) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
@@ -134,13 +343,13 @@
 				self.openModal(targetPage, this);
 			});
 
-			// Close via close button or overlay.
+			// Close via close button or overlay
 			$(document).on('click', self.selectors.modal + ' ' + self.selectors.closeBtn + ', ' + self.selectors.modal + ' ' + self.selectors.overlay, function(e) {
 				e.preventDefault();
 				self.closeModal();
 			});
 
-			// Escape to close and Tab focus-trap while modal is open.
+			// Escape to close and Tab focus-trap
 			$(document).on('keydown', function(e) {
 				var $modal = $(self.selectors.modal);
 				if (!$modal.hasClass('active')) {
@@ -162,13 +371,10 @@
 		openModal: function(targetPage, triggerEl) {
 			this.lastFocusedElement = triggerEl || document.activeElement;
 
-			// Set page state synchronously before showing modal.
 			$(this.selectors.searchInput).val('');
 			this.handleSearch('');
 			this.collapseAllAccordions();
-			this.showPage(targetPage);
 
-			// Reset plan filters.
 			this.activePlan = 'all';
 			this.showSoon = true;
 			var $modal = $(this.selectors.modal);
@@ -177,16 +383,21 @@
 			$modal.find(this.selectors.soonToggle).prop('checked', true);
 			$modal.find('.is-plan-filtered').removeClass('is-plan-filtered');
 
-			// Reset sidebar.
-			$modal.find(this.selectors.layout).removeClass('is-sidebar-collapsed');
+			this.restoreSidebarState();
+			this.showPage(targetPage);
 
 			var $sidebarLink = $modal.find(this.selectors.submenuLink + '[data-docs-page="' + targetPage + '"]').first();
 			var $welcomeLink = $modal.find(this.selectors.welcomeLink).first();
 			this.setActiveLink($sidebarLink.length ? $sidebarLink : $welcomeLink);
 
-			$modal.addClass('active');
-			$('body').addClass('dwm-modal-open');
+			if (window.dwmModalAPI && typeof window.dwmModalAPI.open === 'function') {
+				window.dwmModalAPI.open($modal, { trigger: triggerEl });
+			} else {
+				$modal.addClass('active');
+				$('body').addClass('dwm-modal-open');
+			}
 			$(this.selectors.content).scrollTop(0);
+			this.syncMaximizeButtonState();
 
 			var self = this;
 			setTimeout(function() {
@@ -203,8 +414,13 @@
 				return;
 			}
 
-			$modal.removeClass('active');
-			$('body').removeClass('dwm-modal-open');
+			if (window.dwmModalAPI && typeof window.dwmModalAPI.close === 'function') {
+				window.dwmModalAPI.close($modal);
+			} else {
+				$modal.removeClass('active');
+				$('body').removeClass('dwm-modal-open');
+			}
+			this.setMaximizedState(false);
 
 			if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
 				this.lastFocusedElement.focus();
@@ -244,7 +460,6 @@
 			this.showPage('welcome');
 			this.setActiveLink($(this.selectors.welcomeLink));
 
-			// Reset plan filters
 			this.activePlan = 'all';
 			this.showSoon = true;
 			var $modal = $(this.selectors.modal);
@@ -253,25 +468,21 @@
 			$modal.find(this.selectors.soonToggle).prop('checked', true);
 			$modal.find('.is-plan-filtered').removeClass('is-plan-filtered');
 
-			// Reset sidebar
 			$modal.find(this.selectors.layout).removeClass('is-sidebar-collapsed');
+			sessionStorage.setItem('dwm_docs_sidebar_collapsed', '0');
+			this.setMaximizedState(false);
 		},
 
-		/**
-		 * Apply plan and soon filters to docs navigation
-		 */
 		applyDocFilters: function() {
 			var self = this;
 			var $modal = $(this.selectors.modal);
 
-			// Reset all plan-filtered state
 			$modal.find('.is-plan-filtered').removeClass('is-plan-filtered');
 
 			if (this.activePlan === 'all' && this.showSoon) {
 				return;
 			}
 
-			// Filter leaf items with data-docs-plan
 			$modal.find('[data-docs-plan]').each(function() {
 				var $el = $(this);
 				var plan = $el.attr('data-docs-plan');
@@ -286,7 +497,6 @@
 				}
 			});
 
-			// Hide top-level accordion items where all plan-children are filtered
 			$modal.find(self.selectors.accordionItem).each(function() {
 				var $item = $(this);
 				if ($item.hasClass('is-plan-filtered')) return;
@@ -310,7 +520,6 @@
 			var $panel = $item.find(this.selectors.accordionPanel).first();
 			var isExpanded = $trigger.attr('aria-expanded') === 'true';
 
-			// Close all other accordions
 			$(this.selectors.accordionItem).each(function() {
 				var $other = $(this);
 				if (!$other.is($item)) {
@@ -345,7 +554,7 @@
 		},
 
 		showPage: function(pageId) {
-			var $target = $('[data-docs-page-content="' + pageId + '"]');
+			var $target = $(this.selectors.modal).find('[data-docs-page-content="' + pageId + '"]');
 			if (!$target.length) {
 				if (pageId !== 'welcome') {
 					this.showPage('welcome');
@@ -355,14 +564,10 @@
 			$(this.selectors.pageContent).removeClass('is-active');
 			$target.addClass('is-active');
 			this.currentPage = pageId;
-
-			// Move collapsed-search button into the active page's title wrapper
-			var $wrapper = $target.find('.dwm-docs-section-title-wrapper').first();
-			if ($wrapper.length && this.$collapsedSearch) {
-				this.$collapsedSearch.appendTo($wrapper);
-			} else if (this.$collapsedSearch) {
-				this.$collapsedSearch.detach();
-			}
+			$(this.selectors.pageContent).removeClass('has-sticky-summary');
+			$target.addClass('has-sticky-summary');
+			this.updateStickyHeader(pageId);
+			this.updatePageNavigation(pageId);
 
 			$(this.selectors.content).scrollTop(0);
 		},
@@ -376,13 +581,11 @@
 			$(this.selectors.welcomeLink).removeClass('is-active');
 			$link.addClass('is-active');
 
-			// Expand parent accordion if needed
 			var $parentItem = $link.closest(this.selectors.accordionItem);
 			if ($parentItem.length) {
 				this.expandAccordion($parentItem);
 			}
 
-			// Expand all parent submenu accordions (inner -> outer)
 			var self = this;
 			$link.parents(this.selectors.submenuAccordion).each(function() {
 				self.expandSubmenuAccordion($(this));
@@ -455,6 +658,7 @@
 
 	$(function() {
 		DWMDocsModal.init();
+		$( document ).trigger( 'dwm-docs-modal-ready' );
 	});
 
 	window.DWMDocsModal = DWMDocsModal;

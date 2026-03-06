@@ -10,8 +10,21 @@
 
 import { state, escapeHtml } from './widget-editor-state.js';
 import { getCurrentQueryText } from './widget-editor-query.js';
+import { buildNoResultsPreviewHtml } from './output-preview-empty-state.js';
 
 const $ = jQuery;
+
+function getValidationRows(validation) {
+	if (!validation) return [];
+	if (Array.isArray(validation.rows)) return validation.rows;
+	if (Array.isArray(validation.results)) return validation.results;
+	if (validation.validationResults) {
+		const nested = validation.validationResults;
+		if (Array.isArray(nested.rows)) return nested.rows;
+		if (Array.isArray(nested.results)) return nested.results;
+	}
+	return [];
+}
 
 export function updateQueryPreviewContent() {
 	const query = getCurrentQueryText();
@@ -31,12 +44,10 @@ export function updateQueryPreviewContent() {
 
 export function renderQueryOutputPreview() {
 	const $container = $( '#dwm-query-output-preview-content' );
-	const rows = state.lastValidationResults && state.lastValidationResults.rows
-		? state.lastValidationResults.rows
-		: [];
+	const rows = getValidationRows(state.lastValidationResults);
 
 	if ( rows.length === 0 ) {
-		$container.html( '<p class="dwm-output-empty">No results returned.</p>' );
+		$container.html( buildNoResultsPreviewHtml() );
 		return;
 	}
 
@@ -118,7 +129,7 @@ export function openResultsModal() {
 		return;
 	}
 
-	state.resultsData = state.lastValidationResults.rows || [];
+	state.resultsData = getValidationRows(state.lastValidationResults);
 	state.filteredData = state.resultsData;
 	state.currentPage = 1;
 	state.searchTerm = '';

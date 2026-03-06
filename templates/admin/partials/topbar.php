@@ -28,7 +28,13 @@ const DWM_TOPBAR_MENU_CONFIG = [
 	[
 		'type'    => 'link',
 		'slug'    => 'dashboard-widget-manager',
-		'label'   => 'Dashboard',
+		'label'   => 'Widgets',
+		'classes' => [ 'dwm-topbar-link' ],
+	],
+	[
+		'type'    => 'link',
+		'slug'    => 'dwm-customize-dashboard',
+		'label'   => 'Branding',
 		'classes' => [ 'dwm-topbar-link' ],
 	],
 	[
@@ -41,6 +47,12 @@ const DWM_TOPBAR_MENU_CONFIG = [
 		'type'    => 'link',
 		'slug'    => 'dwm-tools',
 		'label'   => 'Tools',
+		'classes' => [ 'dwm-topbar-link' ],
+	],
+	[
+		'type'    => 'link',
+		'slug'    => 'dwm-integrations',
+		'label'   => 'Integrations',
 		'classes' => [ 'dwm-topbar-link' ],
 	],
 ];

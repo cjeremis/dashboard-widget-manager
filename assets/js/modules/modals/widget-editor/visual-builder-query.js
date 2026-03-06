@@ -48,10 +48,11 @@ export function syncStateFromDOM() {
 
 	state.chartLabelColumn = $( '#dwm-builder-chart-label' ).val() || '';
 	state.chartDataColumns = [];
+	const singleDataColumn = $( '#dwm-builder-chart-data-select' ).val();
+	if ( singleDataColumn ) {
+		state.chartDataColumns.push( singleDataColumn );
+	}
 	$( '#dwm-builder-chart-data-list input[type=checkbox]:checked' ).each( function() {
-		state.chartDataColumns.push( $( this ).val() );
-	} );
-	$( '#dwm-builder-chart-data-list input[type=radio]:checked' ).each( function() {
 		state.chartDataColumns.push( $( this ).val() );
 	} );
 	state.chartTitle      = $( '#dwm-builder-chart-title' ).val() || '';

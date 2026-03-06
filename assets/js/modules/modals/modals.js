@@ -8,18 +8,89 @@
  */
 
 const $ = jQuery;
+let modalOpenOrder = 0;
+const modalZBase = 999999;
+
+function normalizeModalTarget(modalTarget) {
+	if (!modalTarget) {
+		return $();
+	}
+
+	if (modalTarget.jquery) {
+		return modalTarget;
+	}
+
+	if (modalTarget.nodeType === 1) {
+		return $(modalTarget);
+	}
+
+	if (typeof modalTarget === 'string') {
+		if (modalTarget.charAt(0) === '#') {
+			return $(modalTarget);
+		}
+		return $(`#${modalTarget}`);
+	}
+
+	return $(modalTarget);
+}
+
+function getTopActiveModal(excludeId) {
+	const ordered = getActiveModalsInOrder();
+	for (let idx = ordered.length - 1; idx >= 0; idx -= 1) {
+		const modalEl = ordered[idx];
+		if (!excludeId || modalEl.id !== excludeId) {
+			return $(modalEl);
+		}
+	}
+	return $();
+}
+
+function inferSourceModal(options, targetId) {
+	if (options && options.sourceModal) {
+		const $source = normalizeModalTarget(options.sourceModal);
+		if ($source.length) {
+			return $source;
+		}
+	}
+
+	if (options && options.trigger) {
+		const triggerEl = options.trigger.jquery ? options.trigger[0] : options.trigger;
+		if (triggerEl && triggerEl.closest) {
+			const sourceFromTrigger = triggerEl.closest('.dwm-modal.active');
+			if (sourceFromTrigger && sourceFromTrigger.id !== targetId) {
+				return $(sourceFromTrigger);
+			}
+		}
+	}
+
+	return getTopActiveModal(targetId);
+}
 
 /**
  * Open modal
  *
- * @param {string} modalId Modal element ID
+ * @param {string|Element|jQuery} modalTarget Modal element ID, selector, element, or jQuery object
+ * @param {Object} [options] Open options
  */
-export function openModal(modalId) {
-	const $modal = $(`#${modalId}`);
+export function openModal(modalTarget, options = {}) {
+	const $modal = normalizeModalTarget(modalTarget);
+	if (!$modal.length) {
+		return;
+	}
+
+	const modalId = $modal.attr('id') || '';
+	const $sourceModal = options.inheritState === false ? $() : inferSourceModal(options, modalId);
+	if ($sourceModal.length) {
+		$modal.toggleClass('is-maximized', $sourceModal.hasClass('is-maximized'));
+	}
+
+	$modal.attr('data-modal-open-order', ++modalOpenOrder);
 	$modal.addClass('active');
 	$('body').addClass('dwm-modal-open');
+	syncModalLayering();
 	// Reset scroll after display:none is removed
 	$modal.find( '.dwm-modal-body, [data-docs-content]' ).scrollTop( 0 );
+	$(document).trigger('dwmModalOpened', [$modal, modalId]);
 }
 
 /**
@@ -30,19 +101,69 @@ export function openModal(modalId) {
  */
 export function closeModal( modalId ) {
 	if ( modalId ) {
-		$( '#' + modalId ).removeClass( 'active' );
+		const $modal = normalizeModalTarget(modalId);
+		const closedModalId = $modal.attr('id') || '';
+		$modal.removeClass( 'active' );
+		$modal.removeAttr('data-modal-open-order');
+		$modal.css({ 'z-index': '', 'pointer-events': '' });
+		$modal.find('.dwm-modal-overlay').css('visibility', '');
+		$(document).trigger('dwmModalClosed', [$modal, closedModalId]);
 	} else {
-		$( '.dwm-modal' ).removeClass( 'active' );
+		$( '.dwm-modal.active' ).each(function() {
+			const $modal = $(this);
+			const closedModalId = $modal.attr('id') || '';
+			$modal
+				.removeClass('active')
+				.removeAttr('data-modal-open-order')
+				.css({ 'z-index': '', 'pointer-events': '' });
+			$modal.find('.dwm-modal-overlay').css('visibility', '');
+			$(document).trigger('dwmModalClosed', [$modal, closedModalId]);
+		});
 	}
+	syncModalLayering();
 	// Only remove the body scroll-lock when no modals remain open
 	if ( $( '.dwm-modal.active' ).length === 0 ) {
 		$( 'body' ).removeClass( 'dwm-modal-open' );
 	}
 }
 
+function getActiveModalsInOrder() {
+	return $('.dwm-modal.active').get().sort((a, b) => {
+		const aOrder = parseInt($(a).attr('data-modal-open-order'), 10) || 0;
+		const bOrder = parseInt($(b).attr('data-modal-open-order'), 10) || 0;
+		return aOrder - bOrder;
+	});
+}
+
+function syncModalLayering() {
+	const ordered = getActiveModalsInOrder();
+
+	if (!ordered.length) {
+		$('body').removeClass('dwm-modal-open');
+		return;
+	}
+
+	ordered.forEach((modalEl, idx) => {
+		const isTop = idx === ordered.length - 1;
+		const $modal = $(modalEl);
+
+		$modal.css({
+			'z-index': modalZBase + (idx * 2),
+			'pointer-events': isTop ? 'auto' : 'none'
+		});
+		$modal.find('.dwm-modal-overlay').css('visibility', isTop ? 'visible' : 'hidden');
+	});
+
+	$('body').addClass('dwm-modal-open');
+}
+
 // Expose to global scope for cross-bundle and non-import access
 window.openModal  = openModal;
 window.closeModal = closeModal;
+window.dwmModalAPI = {
+	open: openModal,
+	close: closeModal
+};
 
 /**
  * Initialize modal event handlers
@@ -86,7 +207,7 @@ export function initModals() {
 	$(document).on('click', '[data-open-modal]', function() {
 		const modalId = $(this).data('open-modal');
 		if (modalId) {
-			openModal(modalId);
+			openModal(modalId, { trigger: this });
 		}
 	});
 

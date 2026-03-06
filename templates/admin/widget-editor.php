@@ -181,6 +181,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-visual-builder-table" aria-label="<?php esc_attr_e( 'Columns to Select help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
 				</div>
 				<p class="description"><?php esc_html_e( 'Pick which columns appear in your widget. Leave all unchecked to select every column.', 'dashboard-widget-manager' ); ?></p>
+				<div id="dwm-builder-columns-controls" class="dwm-table-controls" style="display:none">
+					<a href="#" id="dwm-builder-select-all-cols"><?php esc_html_e( 'Select All', 'dashboard-widget-manager' ); ?></a>
+					<span>/</span>
+					<a href="#" id="dwm-builder-deselect-all-cols"><?php esc_html_e( 'Deselect All', 'dashboard-widget-manager' ); ?></a>
+				</div>
 				<div id="dwm-builder-columns-list" class="dwm-builder-checkboxes"></div>
 			</div>
 
@@ -234,7 +239,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="dwm-builder-label">
 					<span class="dashicons dashicons-controls-repeat"></span>
 					<?php esc_html_e( 'Limit Results', 'dashboard-widget-manager' ); ?>
-					<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-sql-queries" aria-label="<?php esc_attr_e( 'Limit Results help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
+					<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-visual-builder-sort" aria-label="<?php esc_attr_e( 'Limit Results help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
 				</div>
 				<p class="description"><?php esc_html_e( 'Optionally restrict how many rows your widget returns.', 'dashboard-widget-manager' ); ?></p>
 				<div class="dwm-builder-limit-controls">
@@ -266,11 +271,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<p class="description"><?php esc_html_e( 'Configure query logging and execution time limits. Logs can be found in debug.log.', 'dashboard-widget-manager' ); ?></p>
 
 			<!-- Logging & execution time — compact row above the editor -->
-			<div class="dwm-form-row dwm-query-meta-row">
-				<div class="dwm-form-group">
-					<span class="dwm-form-label">
-						<?php esc_html_e( 'Enable Query Logging', 'dashboard-widget-manager' ); ?>
-						<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-query-logging" aria-label="<?php esc_attr_e( 'Query Logging help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
+				<div class="dwm-form-row dwm-query-meta-row">
+					<div class="dwm-form-group dwm-toggle-under-label">
+						<span class="dwm-form-label">
+							<strong>
+								<?php esc_html_e( 'Enable Query Logging', 'dashboard-widget-manager' ); ?>
+						</strong>
 					</span>
 					<label class="dwm-toggle">
 						<input type="checkbox" id="dwm-enable-query-logging" name="enable_query_logging" value="1">
@@ -280,7 +286,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="dwm-form-group">
 					<label for="dwm-max-execution-time">
 						<?php esc_html_e( 'Max Execution Time (seconds)', 'dashboard-widget-manager' ); ?>
-						<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-execution-time" aria-label="<?php esc_attr_e( 'Execution Time Limit help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
 					</label>
 					<input type="number" id="dwm-max-execution-time" name="max_execution_time" class="dwm-input-number" value="30" min="1" max="60">
 				</div>
@@ -318,12 +323,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 											<?php esc_html_e( 'Validate Query', 'dashboard-widget-manager' ); ?>
 										</button>
 									</div>
-									<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-sql-queries" aria-label="<?php esc_attr_e( 'SQL Query Editor help', 'dashboard-widget-manager' ); ?>">
+									<div id="dwm-query-editor-validation-status" class="dwm-query-editor-validation-status" style="display:none"></div>
 										<span class="dashicons dashicons-editor-help"></span>
 									</button>
 									</div>
 								<div class="dwm-query-editor-wrapper">
-								<div id="dwm-query-editor-validation-status" class="dwm-query-editor-validation-status" style="display:none"></div>
 								<div class="dwm-query-editor-loading" style="display:none"><span class="dashicons dashicons-update dwm-spin"></span></div>
 								<textarea id="dwm-widget-query" name="sql_query" class="dwm-code-editor" rows="10" required></textarea>
 							</div>
@@ -348,17 +352,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<p class="description"><?php esc_html_e( 'Cache query results to reduce database load and improve dashboard performance.', 'dashboard-widget-manager' ); ?></p>
 
 				<div class="dwm-form-row">
-					<div class="dwm-form-group">
-						<span class="dwm-form-label"><?php esc_html_e( 'Enable Caching', 'dashboard-widget-manager' ); ?></span>
-						<p class="description"><?php esc_html_e( 'Store query results to improve performance.', 'dashboard-widget-manager' ); ?></p>
+					<div class="dwm-form-group dwm-toggle-under-label">
+						<span class="dwm-form-label dwm-cache-toggle-label"><?php esc_html_e( 'Enable Caching', 'dashboard-widget-manager' ); ?></span>
 						<label class="dwm-toggle">
 							<input type="checkbox" id="dwm-enable-caching" name="enable_caching" value="1">
 							<span class="dwm-toggle-slider"></span>
 						</label>
 					</div>
-					<div class="dwm-form-group">
+					<div class="dwm-form-group" id="dwm-cache-duration-group">
 						<label for="dwm-cache-duration"><?php esc_html_e( 'Cache Duration (seconds)', 'dashboard-widget-manager' ); ?></label>
-						<p class="description"><?php esc_html_e( 'Set how long cached results are kept before refresh.', 'dashboard-widget-manager' ); ?></p>
 						<input type="number" id="dwm-cache-duration" name="cache_duration" class="dwm-input-number" value="300" min="0" max="3600">
 					</div>
 				</div>
@@ -416,7 +418,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="dwm-builder-label">
 					<span class="dashicons dashicons-chart-bar"></span>
 					<span id="dwm-builder-chart-config-title"><?php esc_html_e( 'Chart Configuration', 'dashboard-widget-manager' ); ?></span>
-					<button type="button" id="dwm-builder-chart-config-help" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-visual-builder-chart-config" aria-label="<?php esc_attr_e( 'Chart Configuration help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
+					<button type="button" id="dwm-builder-chart-config-help" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-output-chart-config" aria-label="<?php esc_attr_e( 'Chart Configuration help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
 				</div>
 				<p class="description" id="dwm-builder-chart-config-desc"><?php esc_html_e( 'Configure chart columns and display options for the selected chart mode.', 'dashboard-widget-manager' ); ?></p>
 				<div class="dwm-form-row">
@@ -425,66 +427,43 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<select id="dwm-builder-chart-label" class="dwm-select">
 							<option value=""><?php esc_html_e( '— select column —', 'dashboard-widget-manager' ); ?></option>
 						</select>
-						<p class="description" id="dwm-builder-chart-label-desc"><?php esc_html_e( 'Column used for X-axis labels or pie slice names.', 'dashboard-widget-manager' ); ?></p>
 					</div>
 					<div class="dwm-form-group">
 						<label id="dwm-builder-chart-data-title"><?php esc_html_e( 'Data Column(s)', 'dashboard-widget-manager' ); ?> *</label>
 						<div id="dwm-builder-chart-data-list" class="dwm-builder-checkboxes"></div>
-						<p class="description" id="dwm-builder-chart-data-desc"><?php esc_html_e( 'Numeric column(s) to plot as datasets.', 'dashboard-widget-manager' ); ?></p>
 					</div>
 				</div>
+			</div>
+
+			</div><!-- /.dwm-tab-content[output] -->
+
+		<!-- Template Tab -->
+		<div class="dwm-tab-content" data-tab="template">
+
+			<div class="dwm-builder-section" id="dwm-template-chart-settings" style="display:none">
+				<div class="dwm-builder-label">
+					<span class="dashicons dashicons-chart-area"></span>
+					<?php esc_html_e( 'Chart Display Options', 'dashboard-widget-manager' ); ?>
+					<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-visual-builder-chart-config" aria-label="<?php esc_attr_e( 'Chart Display Options help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
+				</div>
+				<p class="description"><?php esc_html_e( 'Set chart title and legend display for chart-based widgets.', 'dashboard-widget-manager' ); ?></p>
 				<div class="dwm-form-row">
 					<div class="dwm-form-group">
 						<label for="dwm-builder-chart-title"><?php esc_html_e( 'Chart Title', 'dashboard-widget-manager' ); ?></label>
 						<input type="text" id="dwm-builder-chart-title" class="dwm-input-text" placeholder="<?php esc_attr_e( 'Optional title shown above the chart', 'dashboard-widget-manager' ); ?>">
 					</div>
 					<div class="dwm-form-group">
-						<label for="dwm-builder-chart-theme"><?php esc_html_e( 'Chart Theme', 'dashboard-widget-manager' ); ?></label>
-						<select id="dwm-builder-chart-theme" class="dwm-select">
-							<option value="classic"><?php esc_html_e( 'Classic', 'dashboard-widget-manager' ); ?></option>
-							<option value="sunset"><?php esc_html_e( 'Sunset', 'dashboard-widget-manager' ); ?></option>
-							<option value="forest"><?php esc_html_e( 'Forest', 'dashboard-widget-manager' ); ?></option>
-							<option value="oceanic"><?php esc_html_e( 'Oceanic', 'dashboard-widget-manager' ); ?></option>
-							<option value="monochrome"><?php esc_html_e( 'Monochrome', 'dashboard-widget-manager' ); ?></option>
-							<option value="candy"><?php esc_html_e( 'Candy', 'dashboard-widget-manager' ); ?></option>
-						</select>
-						<p class="description"><?php esc_html_e( 'Choose the color palette used for chart datasets.', 'dashboard-widget-manager' ); ?></p>
-					</div>
-					<div class="dwm-form-group dwm-form-group-checkbox">
-						<label>
-							<input type="checkbox" id="dwm-builder-chart-legend" checked>
-							<?php esc_html_e( 'Show legend', 'dashboard-widget-manager' ); ?>
-						</label>
-						<p class="description"><?php esc_html_e( 'Display dataset labels below the chart.', 'dashboard-widget-manager' ); ?></p>
-					</div>
-				</div>
-			</div>
-
-			<!-- No Results Template -->
-			<div class="dwm-builder-section">
-				<div class="dwm-builder-label"><span class="dashicons dashicons-dismiss"></span> <?php esc_html_e( 'No Results Template', 'dashboard-widget-manager' ); ?> <button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-no-results-template" aria-label="<?php esc_attr_e( 'No Results Template help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button></div>
-				<p class="description"><?php esc_html_e( 'This template is displayed when your query returns zero results. Enable editing to customize the message.', 'dashboard-widget-manager' ); ?></p>
-				<div class="dwm-form-group">
-					<div class="dwm-query-editor-header">
-						<div class="dwm-query-edit-toggle">
-							<label class="dwm-toggle" for="dwm-no-results-template-edit-toggle">
-								<input type="checkbox" id="dwm-no-results-template-edit-toggle">
+						<label for="dwm-builder-chart-legend"><?php esc_html_e( 'Show Legend', 'dashboard-widget-manager' ); ?></label>
+						<div class="dwm-chart-legend-toggle-row">
+							<label class="dwm-toggle-switch">
+								<input type="checkbox" id="dwm-builder-chart-legend" checked>
 								<span class="dwm-toggle-slider"></span>
 							</label>
-							<span class="dwm-query-edit-toggle-text"><?php esc_html_e( 'Allow Editing', 'dashboard-widget-manager' ); ?></span>
+							<span class="dwm-chart-legend-toggle-label"><?php esc_html_e( 'Enable legend', 'dashboard-widget-manager' ); ?></span>
 						</div>
 					</div>
-					<textarea id="dwm-widget-no-results-template" name="no_results_template" class="dwm-code-editor" rows="8"></textarea>
 				</div>
-			</div>
-
-		</div><!-- /.dwm-tab-content[output] -->
-
-		<!-- Template Tab -->
-		<div class="dwm-tab-content" data-tab="template">
-
-			<div class="dwm-builder-intro dwm-chart-mode-notice" style="display:none">
-				<p><span class="dashicons dashicons-chart-bar"></span> <?php esc_html_e( 'Chart mode is active. The chart is rendered automatically from your query results — a template is not required. You can add HTML above the chart here if needed.', 'dashboard-widget-manager' ); ?></p>
+				<input type="hidden" id="dwm-builder-chart-theme" value="classic">
 			</div>
 
 			<div class="dwm-builder-section" id="dwm-editor-theme-section">
@@ -685,30 +664,57 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 				<div class="dwm-builder-section">
 				<div class="dwm-builder-label"><span class="dashicons dashicons-editor-code"></span> <?php esc_html_e( 'Widget Template', 'dashboard-widget-manager' ); ?> <button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-html-php-templates" aria-label="<?php esc_attr_e( 'Widget Template help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button></div>
-				<p class="description"><?php esc_html_e( 'The HTML/PHP template is auto-genrated, but can be manually modified to customize how your widget renders on the dashboard.', 'dashboard-widget-manager' ); ?></p>
-				<div class="dwm-form-group">
-					<div class="dwm-query-editor-header">
-						<div class="dwm-query-edit-toggle">
-							<label class="dwm-toggle" for="dwm-template-edit-toggle">
-								<input type="checkbox" id="dwm-template-edit-toggle">
-								<span class="dwm-toggle-slider"></span>
-							</label>
-							<span class="dwm-query-edit-toggle-text"><?php esc_html_e( 'Allow Editing', 'dashboard-widget-manager' ); ?></span>
-						</div>
-						<button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-variable-interpolation" aria-label="<?php esc_attr_e( 'Template variables help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button>
+				<p class="description"><?php esc_html_e( 'The HTML/PHP template is auto-generated, but can be manually modified to customize how your widget renders on the dashboard.', 'dashboard-widget-manager' ); ?></p>
+
+				<div class="dwm-template-preview-section">
+					<div class="dwm-template-preview-tabs">
+						<button type="button" class="dwm-template-preview-tab active" data-template-tab="main">
+							<span class="dashicons dashicons-editor-code"></span>
+							<?php esc_html_e( 'Results Template', 'dashboard-widget-manager' ); ?>
+						</button>
+						<button type="button" class="dwm-template-preview-tab" data-template-tab="no-results">
+							<span class="dashicons dashicons-dismiss"></span>
+							<?php esc_html_e( 'No Results Template', 'dashboard-widget-manager' ); ?>
+						</button>
 					</div>
-					<textarea id="dwm-widget-template" name="template" class="dwm-code-editor" rows="15"></textarea>
+
+					<div class="dwm-template-preview-pane active" data-template-pane="main">
+						<div class="dwm-form-group">
+							<div class="dwm-query-editor-header">
+								<div class="dwm-query-edit-toggle">
+									<label class="dwm-toggle" for="dwm-template-edit-toggle">
+										<input type="checkbox" id="dwm-template-edit-toggle">
+										<span class="dwm-toggle-slider"></span>
+									</label>
+									<span class="dwm-query-edit-toggle-text"><?php esc_html_e( 'Allow Editing', 'dashboard-widget-manager' ); ?></span>
+								</div>
+							</div>
+							<textarea id="dwm-widget-template" name="template" class="dwm-code-editor" rows="15"></textarea>
+						</div>
+					</div>
+
+					<div class="dwm-template-preview-pane" data-template-pane="no-results">
+						<div class="dwm-form-group">
+							<div class="dwm-query-editor-header">
+								<div class="dwm-query-edit-toggle">
+									<label class="dwm-toggle" for="dwm-no-results-template-edit-toggle">
+										<input type="checkbox" id="dwm-no-results-template-edit-toggle">
+										<span class="dwm-toggle-slider"></span>
+									</label>
+									<span class="dwm-query-edit-toggle-text"><?php esc_html_e( 'Allow Editing', 'dashboard-widget-manager' ); ?></span>
+								</div>
+							</div>
+							<textarea id="dwm-widget-no-results-template" name="no_results_template" class="dwm-code-editor" rows="8"></textarea>
+						</div>
+					</div>
 				</div>
-				</div><!-- /.dwm-builder-section[widget-template] -->
+			</div><!-- /.dwm-builder-section[widget-template] -->
 
 		</div>
 
 		<!-- Styles Tab -->
 		<div class="dwm-tab-content" data-tab="styles">
 
-			<div class="dwm-builder-intro dwm-chart-mode-notice" style="display:none">
-				<p><span class="dashicons dashicons-chart-bar"></span> <?php esc_html_e( 'Chart mode is active. Chart.js handles styling automatically. Add CSS here only to style custom template content above the chart.', 'dashboard-widget-manager' ); ?></p>
-			</div>
 				<div class="dwm-builder-section">
 				<div class="dwm-builder-label"><span class="dashicons dashicons-art"></span> <?php esc_html_e( 'Widget Styles', 'dashboard-widget-manager' ); ?> <button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-custom-css" aria-label="<?php esc_attr_e( 'Widget Styles help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button></div>
 				<p class="description"><?php esc_html_e( 'CSS will be automatically generated based on your chosen Display Type and Theme. Enable Editing to add custom styling to this widget.', 'dashboard-widget-manager' ); ?></p>
@@ -730,13 +736,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<!-- Scripts Tab -->
 		<div class="dwm-tab-content" data-tab="scripts">
 
-			<div class="dwm-builder-intro dwm-chart-mode-notice" style="display:none">
-				<p><span class="dashicons dashicons-chart-bar"></span> <?php esc_html_e( 'Chart mode is active. Chart.js is loaded automatically. Add JavaScript here only for extra interactivity beyond the chart.', 'dashboard-widget-manager' ); ?></p>
-			</div>
 				<div class="dwm-builder-section">
 				<div class="dwm-builder-label"><span class="dashicons dashicons-media-code"></span> <?php esc_html_e( 'Widget Scripts', 'dashboard-widget-manager' ); ?> <button type="button" class="dwm-help-icon-btn dwm-docs-trigger" data-open-modal="dwm-docs-modal" data-docs-page="feature-custom-js" aria-label="<?php esc_attr_e( 'Widget Scripts help', 'dashboard-widget-manager' ); ?>"><span class="dashicons dashicons-editor-help"></span></button></div>
 				<p class="description"><?php esc_html_e( 'Add custom JavaScript for this widget. jQuery is available and runs when the widget loads.', 'dashboard-widget-manager' ); ?></p>
-				<p class="description"><strong><?php esc_html_e( 'Custom JS runs for all users who can see this widget.', 'dashboard-widget-manager' ); ?></strong></p>
 				<div class="dwm-form-group">
 					<div class="dwm-query-editor-header">
 						<div class="dwm-query-edit-toggle">

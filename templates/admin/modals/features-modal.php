@@ -31,6 +31,9 @@ $first_category = array_key_first( $all_features );
 				<span class="dashicons dashicons-awards"></span>
 				<?php esc_html_e( 'Dashboard Widget Manager Features', 'dashboard-widget-manager' ); ?>
 			</h2>
+			<button type="button" class="dwm-modal-maximize" aria-label="<?php esc_attr_e( 'Maximize features modal', 'dashboard-widget-manager' ); ?>" title="<?php esc_attr_e( 'Maximize', 'dashboard-widget-manager' ); ?>">
+				<span class="dashicons dashicons-editor-expand" aria-hidden="true"></span>
+			</button>
 			<button type="button" class="dwm-modal-close" aria-label="<?php esc_attr_e( 'Close modal', 'dashboard-widget-manager' ); ?>">
 				<span class="dashicons dashicons-no-alt"></span>
 			</button>
@@ -83,13 +86,14 @@ $first_category = array_key_first( $all_features );
 									class="dwm-sidebar-modal-menu-link is-active"
 									data-dwm-features-page="overview"
 								>
-									<span class="dashicons dashicons-dashboard"></span>
+									<img src="<?php echo esc_url( $hero_img ); ?>" alt="" class="dwm-sidebar-modal-menu-logo" loading="lazy">
 									<?php esc_html_e( 'Overview', 'dashboard-widget-manager' ); ?>
 								</button>
 							</li>
 							<?php
 							$first = false;
 							$is_first_category = true;
+							$pro_badge_categories = [ 'branding', 'performance' ];
 							foreach ( $all_features as $category_name => $features ) :
 								$category_slug   = sanitize_title( $category_name );
 								$icon            = DWM_Features::get_category_icon( $category_name );
@@ -105,7 +109,7 @@ $first_category = array_key_first( $all_features );
 									>
 										<span class="dashicons dashicons-<?php echo esc_attr( $icon ); ?>"></span>
 										<?php echo esc_html( $category_name ); ?>
-										<?php if ( in_array( $category_slug, [ 'performance', 'styles-scripts' ], true ) ) : ?>
+										<?php if ( in_array( $category_slug, $pro_badge_categories, true ) ) : ?>
 											<span class="dwm-sidebar-modal-menu-pro-badge"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
 										<?php endif; ?>
 										<span class="dwm-sidebar-modal-menu-count"><?php echo count( array_filter( $features, function( $f ) { return empty( $f['category_overview'] ); } ) ); ?></span>
@@ -140,7 +144,9 @@ $first_category = array_key_first( $all_features );
 						<div class="dwm-sidebar-modal-sticky-header-left">
 							<div class="dwm-sidebar-modal-sticky-title">
 								<span class="dwm-sidebar-modal-sticky-icon" data-dwm-sticky-icon></span>
-								<h3 data-dwm-sticky-title><?php esc_html_e( 'Features', 'dashboard-widget-manager' ); ?></h3>
+								<div class="dwm-sidebar-modal-sticky-title-text">
+									<h3 data-dwm-sticky-title><?php esc_html_e( 'Overview', 'dashboard-widget-manager' ); ?></h3>
+								</div>
 								<span class="dwm-sidebar-modal-sticky-badge" data-dwm-sticky-badge></span>
 							</div>
 						</div>
@@ -148,18 +154,21 @@ $first_category = array_key_first( $all_features );
 							<div class="dwm-sidebar-modal-page-nav" data-dwm-page-nav>
 								<button type="button" class="dwm-sidebar-modal-nav-btn is-prev" data-dwm-nav-direction="prev" aria-label="<?php esc_attr_e( 'Previous page', 'dashboard-widget-manager' ); ?>">
 									<span class="dashicons dashicons-arrow-left-alt2"></span>
-									<span class="dwm-nav-label"><?php esc_html_e( 'Prev', 'dashboard-widget-manager' ); ?></span>
+									<span class="dwm-nav-label" data-dwm-prev-label><?php esc_html_e( 'Prev', 'dashboard-widget-manager' ); ?></span>
 								</button>
 								<button type="button" class="dwm-sidebar-modal-nav-btn is-next" data-dwm-nav-direction="next" aria-label="<?php esc_attr_e( 'Next page', 'dashboard-widget-manager' ); ?>">
-									<span class="dwm-nav-label"><?php esc_html_e( 'Next', 'dashboard-widget-manager' ); ?></span>
+									<span class="dwm-nav-label" data-dwm-next-label><?php esc_html_e( 'Next', 'dashboard-widget-manager' ); ?></span>
 									<span class="dashicons dashicons-arrow-right-alt2"></span>
+								</button>
+								<button type="button" class="dwm-features-collapsed-search" aria-label="<?php esc_attr_e( 'Search features', 'dashboard-widget-manager' ); ?>">
+									<span class="dashicons dashicons-search"></span>
 								</button>
 							</div>
 						</div>
 					</div>
 
 					<!-- Overview Landing Page -->
-					<div class="dwm-sidebar-modal-page is-active" data-dwm-features-page-content="overview">
+					<div class="dwm-sidebar-modal-page is-active" data-dwm-features-page-content="overview" data-page-title="<?php esc_attr_e( 'Overview', 'dashboard-widget-manager' ); ?>" data-page-icon="dashboard">
 						<!-- Hero -->
 						<div class="dwm-overview-hero">
 							<img src="<?php echo $hero_img; ?>" alt="<?php echo esc_attr( $hero_plugin_name ); ?>" class="dwm-overview-hero-logo">
@@ -203,7 +212,7 @@ $first_category = array_key_first( $all_features );
 									<div class="dwm-overview-pillar-icon"><?php echo esc_html( $pillar['icon'] ); ?></div>
 									<h4><?php echo esc_html( $pillar['title'] ); ?></h4>
 									<p><?php echo esc_html( $pillar['desc'] ); ?></p>
-									<button type="button" class="dwm-learn-more-button dwm-overview-pillar-link" data-docs-page="<?php echo esc_attr( $pillar['docs_page'] ); ?>">
+									<button type="button" class="dwm-learn-more-button dwm-button-primary dwm-overview-pillar-link" data-open-modal="dwm-docs-modal" data-docs-page="<?php echo esc_attr( $pillar['docs_page'] ); ?>">
 										<?php esc_html_e( 'Learn More', 'dashboard-widget-manager' ); ?>
 									</button>
 								</div>
@@ -243,13 +252,12 @@ $first_category = array_key_first( $all_features );
 											</div>
 											<p><?php echo esc_html( $bf['tagline'] ); ?></p>
 										</div>
-										<button type="button" class="dwm-learn-more-button dwm-overview-blackhawk-link" data-docs-page="<?php echo esc_attr( $bf['docs_page'] ); ?>">
+										<button type="button" class="dwm-learn-more-button dwm-button-primary dwm-overview-blackhawk-link" data-open-modal="dwm-docs-modal" data-docs-page="<?php echo esc_attr( $bf['docs_page'] ); ?>">
 											<?php esc_html_e( 'Learn More', 'dashboard-widget-manager' ); ?>
 										</button>
 									</div>
 								<?php endforeach; ?>
 							</div>
-							<p class="dwm-overview-blackhawk-note"><?php esc_html_e( 'And this is only a fraction of what\'s coming with Pro.', 'dashboard-widget-manager' ); ?></p>
 						</div>
 
 						<!-- Plugin Ecosystem -->
@@ -328,7 +336,7 @@ $first_category = array_key_first( $all_features );
 						<?php if ( ! $user_has_pro ) : ?>
 						<!-- Upgrade CTA -->
 						<div class="dwm-overview-upgrade">
-							<span class="dwm-features-pro-cta-glow"></span>
+							<span class="dwm-features-pro-dwm-glow"></span>
 							<div class="dwm-overview-upgrade-content">
 								<span class="dwm-overview-upgrade-icon-wrap">
 									<span class="dashicons dashicons-star-filled dwm-overview-upgrade-icon dwm-animate-slow"></span>
@@ -359,20 +367,19 @@ $first_category = array_key_first( $all_features );
 
 						$is_pro_category = in_array( $category_slug, [ 'performance', 'styles-scripts' ], true );
 						?>
-						<div class="dwm-sidebar-modal-page<?php echo esc_attr( $active_class ); ?>" data-dwm-features-page-content="<?php echo esc_attr( $category_slug ); ?>">
+						<div class="dwm-sidebar-modal-page<?php echo esc_attr( $active_class ); ?>" data-dwm-features-page-content="<?php echo esc_attr( $category_slug ); ?>" data-page-title="<?php echo esc_attr( $category_name ); ?>" data-page-icon="<?php echo esc_attr( DWM_Features::get_category_icon( $category_name ) ); ?>">
 							<div class="dwm-sidebar-modal-page-header">
-								<h3><?php echo esc_html( $category_name ); ?></h3>
 								<p><?php echo esc_html( DWM_Features::get_category_description( $category_name ) ); ?></p>
 							</div>
 
 							<?php if ( $is_pro_category && ! $user_has_pro ) : ?>
 								<div class="dwm-features-pro-cta">
-									<span class="dwm-features-pro-cta-glow"></span>
-									<span class="dashicons dashicons-star-filled dwm-features-pro-cta-icon"></span>
-									<strong class="dwm-features-pro-cta-title"><?php esc_html_e( 'Unlock Pro', 'dashboard-widget-manager' ); ?></strong>
+									<span class="dwm-features-pro-dwm-glow"></span>
+									<span class="dashicons dashicons-star-filled dwm-features-pro-dwm-icon"></span>
+									<strong class="dwm-features-pro-dwm-title"><?php esc_html_e( 'Unlock Pro', 'dashboard-widget-manager' ); ?></strong>
 									<span class="dwm-pro-badge"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
-									<span class="dwm-features-pro-cta-message"><?php esc_html_e( 'Activate your Pro license for these features.', 'dashboard-widget-manager' ); ?></span>
-									<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-settings#dwm-pro-license-key' ) ); ?>" class="dwm-features-pro-cta-button">
+									<span class="dwm-features-pro-dwm-message"><?php esc_html_e( 'Activate your Pro license for these features.', 'dashboard-widget-manager' ); ?></span>
+									<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-settings#dwm-pro-license-key' ) ); ?>" class="dwm-features-pro-dwm-button">
 										<span class="dashicons dashicons-unlock"></span>
 										<?php esc_html_e( 'Add License Key', 'dashboard-widget-manager' ); ?>
 									</a>
@@ -403,13 +410,13 @@ $first_category = array_key_first( $all_features );
 							</div>
 
 							<?php if ( ! $is_pro_category && ! $user_has_pro ) : ?>
-								<div class="dwm-features-pro-cta dwm-features-pro-cta--bottom">
-									<span class="dwm-features-pro-cta-glow"></span>
-									<span class="dashicons dashicons-star-filled dwm-features-pro-cta-icon"></span>
-									<strong class="dwm-features-pro-cta-title"><?php esc_html_e( 'Get Pro', 'dashboard-widget-manager' ); ?></strong>
+								<div class="dwm-features-pro-cta dwm-features-pro-dwm--bottom">
+									<span class="dwm-features-pro-dwm-glow"></span>
+									<span class="dashicons dashicons-star-filled dwm-features-pro-dwm-icon"></span>
+									<strong class="dwm-features-pro-dwm-title"><?php esc_html_e( 'Get Pro', 'dashboard-widget-manager' ); ?></strong>
 									<span class="dwm-pro-badge"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
-									<span class="dwm-features-pro-cta-message"><?php esc_html_e( 'Unlock advanced features, integrations, and more with Pro.', 'dashboard-widget-manager' ); ?></span>
-									<a href="<?php echo esc_url( admin_url( 'admin.php?page=dashboard-widget-manager&modal=pro-upgrade' ) ); ?>" class="dwm-features-pro-cta-button">
+									<span class="dwm-features-pro-dwm-message"><?php esc_html_e( 'Unlock advanced features, integrations, and more with Pro.', 'dashboard-widget-manager' ); ?></span>
+									<a href="<?php echo esc_url( admin_url( 'admin.php?page=dashboard-widget-manager&modal=pro-upgrade' ) ); ?>" class="dwm-features-pro-dwm-button">
 										<span class="dashicons dashicons-star-filled"></span>
 										<?php esc_html_e( 'Upgrade to Pro', 'dashboard-widget-manager' ); ?>
 									</a>
@@ -422,20 +429,19 @@ $first_category = array_key_first( $all_features );
 					?>
 
 					<!-- Integrations Page -->
-					<div class="dwm-sidebar-modal-page" data-dwm-features-page-content="integrations">
+					<div class="dwm-sidebar-modal-page" data-dwm-features-page-content="integrations" data-page-title="<?php echo esc_attr( $integrations_meta['label'] ); ?>" data-page-icon="<?php echo esc_attr( $integrations_meta['icon'] ); ?>">
 						<div class="dwm-sidebar-modal-page-header">
-							<h3><?php echo esc_html( $integrations_meta['label'] ); ?></h3>
 							<p><?php echo esc_html( $integrations_meta['description'] ); ?></p>
 						</div>
 
 						<?php if ( ! $user_has_pro ) : ?>
 							<div class="dwm-features-pro-cta">
-								<span class="dwm-features-pro-cta-glow"></span>
-								<span class="dashicons dashicons-star-filled dwm-features-pro-cta-icon"></span>
-								<strong class="dwm-features-pro-cta-title"><?php esc_html_e( 'Pro Integrations', 'dashboard-widget-manager' ); ?></strong>
+								<span class="dwm-features-pro-dwm-glow"></span>
+								<span class="dashicons dashicons-star-filled dwm-features-pro-dwm-icon"></span>
+								<strong class="dwm-features-pro-dwm-title"><?php esc_html_e( 'Pro Integrations', 'dashboard-widget-manager' ); ?></strong>
 								<span class="dwm-pro-badge"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
-								<span class="dwm-features-pro-cta-message"><?php esc_html_e( 'Activate your Pro license for integrations.', 'dashboard-widget-manager' ); ?></span>
-								<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-settings#dwm-pro-license-key' ) ); ?>" class="dwm-features-pro-cta-button">
+								<span class="dwm-features-pro-dwm-message"><?php esc_html_e( 'Activate your Pro license for integrations.', 'dashboard-widget-manager' ); ?></span>
+								<a href="<?php echo esc_url( admin_url( 'admin.php?page=dwm-settings#dwm-pro-license-key' ) ); ?>" class="dwm-features-pro-dwm-button">
 									<span class="dashicons dashicons-unlock"></span>
 									<?php esc_html_e( 'Add License Key', 'dashboard-widget-manager' ); ?>
 								</a>
@@ -484,11 +490,9 @@ $first_category = array_key_first( $all_features );
 													<?php else : ?>
 														<span class="dwm-badge dwm-badge-success"><?php echo esc_html( $labels['badge_available'] ); ?></span>
 													<?php endif; ?>
-													<?php if ( ! empty( $integration['docs_page'] ) ) : ?>
-														<button type="button" class="dwm-learn-more-button" data-docs-page="<?php echo esc_attr( $integration['docs_page'] ); ?>">
-															<?php esc_html_e( 'Learn More', 'dashboard-widget-manager' ); ?>
-														</button>
-													<?php endif; ?>
+													<button type="button" class="dwm-learn-more-button dwm-button-primary" data-open-modal="dwm-docs-modal" data-docs-page="<?php echo esc_attr( $integration['docs_page'] ); ?>">
+														<?php esc_html_e( 'Learn More', 'dashboard-widget-manager' ); ?>
+													</button>
 												</div>
 											</div>
 										<?php endforeach; ?>
@@ -503,181 +507,3 @@ $first_category = array_key_first( $all_features );
 	</div>
 </div>
 
-<script>
-(function() {
-	var layout = document.querySelector('.dwm-sidebar-modal-layout');
-	if (!layout) return;
-
-	var searchInput   = layout.querySelector('[data-dwm-features-search]');
-	var searchClear   = layout.querySelector('[data-dwm-features-search-clear]');
-	var planBtns      = layout.querySelectorAll('[data-dwm-features-plan]');
-	var soonToggle    = layout.querySelector('[data-dwm-features-soon-toggle]');
-	var menuItems     = layout.querySelectorAll('[data-dwm-features-page]');
-	var activePlan    = 'all';
-	var showSoon      = true;
-	var searchTerm    = '';
-
-	function applyFilters() {
-		var pages = layout.querySelectorAll('[data-dwm-features-page-content]');
-		var term = searchTerm.toLowerCase();
-
-		pages.forEach(function(page) {
-			var slug = page.dataset.dwmFeaturesPageContent;
-			if (slug === 'integrations' || slug === 'overview') return;
-
-			var cards = page.querySelectorAll('.dwm-feature-card');
-			var visible = 0;
-
-			cards.forEach(function(card) {
-				var plan = card.dataset.featurePlan;
-				var implemented = card.dataset.featureImplemented === '1';
-				var show = true;
-
-				if (activePlan !== 'all' && plan !== activePlan) show = false;
-				if (!showSoon && !implemented) show = false;
-
-				if (show && term.length >= 3) {
-					var titleText = card.dataset.featureTitle || '';
-					var searchText = card.dataset.featureSearch || '';
-					if (titleText.indexOf(term) === -1 && searchText.indexOf(term) === -1) {
-						show = false;
-					}
-				}
-
-				card.style.display = show ? '' : 'none';
-				if (show) visible++;
-			});
-
-			var menuBtn = layout.querySelector('[data-dwm-features-page="' + slug + '"]');
-			if (menuBtn) {
-				var countEl = menuBtn.querySelector('.dwm-sidebar-modal-menu-count');
-				if (countEl) countEl.textContent = visible;
-			}
-		});
-	}
-
-	function resetFilters() {
-		searchTerm = '';
-		if (searchInput) searchInput.value = '';
-		updateSearchIcon();
-		activePlan = 'all';
-		planBtns.forEach(function(btn) {
-			btn.classList.toggle('is-active', btn.dataset.dwmFeaturesPlan === 'all');
-		});
-		if (soonToggle) {
-			soonToggle.checked = true;
-			showSoon = true;
-		}
-		applyFilters();
-	}
-
-	function updateSearchIcon() {
-		if (!searchClear) return;
-		var icon = searchClear.querySelector('.dashicons');
-		if (!icon) return;
-		if (searchInput && searchInput.value.length >= 3) {
-			icon.className = 'dashicons dashicons-no-alt';
-			searchClear.classList.add('has-value');
-		} else {
-			icon.className = 'dashicons dashicons-search';
-			searchClear.classList.remove('has-value');
-		}
-	}
-
-	if (searchInput) {
-		var debounce;
-		searchInput.addEventListener('input', function() {
-			clearTimeout(debounce);
-			debounce = setTimeout(function() {
-				searchTerm = searchInput.value;
-				updateSearchIcon();
-				applyFilters();
-			}, 200);
-		});
-	}
-
-	if (searchClear) {
-		searchClear.addEventListener('click', function() {
-			if (searchInput && searchInput.value.length > 0) {
-				searchInput.value = '';
-				searchTerm = '';
-				updateSearchIcon();
-				applyFilters();
-				searchInput.focus();
-			}
-		});
-	}
-
-	planBtns.forEach(function(btn) {
-		btn.addEventListener('click', function() {
-			activePlan = btn.dataset.dwmFeaturesPlan;
-			planBtns.forEach(function(b) { b.classList.remove('is-active'); });
-			btn.classList.add('is-active');
-			applyFilters();
-		});
-	});
-
-	if (soonToggle) {
-		soonToggle.addEventListener('change', function() {
-			showSoon = soonToggle.checked;
-			applyFilters();
-		});
-	}
-
-	// Navigation
-	document.addEventListener('click', function(e) {
-		var menuLink = e.target.closest('[data-dwm-features-page]');
-		if (!menuLink) return;
-
-		var page  = menuLink.dataset.dwmFeaturesPage;
-		var modal = menuLink.closest('.dwm-sidebar-modal-layout');
-		if (!modal) return;
-
-		modal.querySelectorAll('[data-dwm-features-page]').forEach(function(link) {
-			link.classList.remove('is-active');
-		});
-		menuLink.classList.add('is-active');
-
-		modal.querySelectorAll('[data-dwm-features-page-content]').forEach(function(content) {
-			content.classList.remove('is-active');
-		});
-		var targetContent = modal.querySelector('[data-dwm-features-page-content="' + page + '"]');
-		if (targetContent) {
-			targetContent.classList.add('is-active');
-		}
-	});
-
-	// Learn More
-	document.addEventListener('click', function(e) {
-		var btn = e.target.closest('.dwm-learn-more-button');
-		if (!btn) return;
-
-		var docsPage = btn.dataset.docsPage;
-		if (!docsPage || !window.DWMDocsModal) return;
-
-		var $link = jQuery('#dwm-docs-modal [data-docs-page="' + docsPage + '"]').first();
-		window.DWMDocsModal.collapseAllAccordions();
-		window.DWMDocsModal.showPage(docsPage);
-		window.DWMDocsModal.setActiveLink($link.length ? $link : jQuery('#dwm-docs-modal .dwm-docs-welcome-link'));
-
-		jQuery('#dwm-docs-modal').addClass('active');
-		jQuery('body').addClass('dwm-modal-open');
-	});
-
-	// Reset on modal close
-	var observer = new MutationObserver(function(mutations) {
-		mutations.forEach(function(m) {
-			if (m.type === 'attributes') {
-				var modal = document.getElementById('dwm-features-modal');
-				if (modal && !modal.classList.contains('active')) {
-					resetFilters();
-				}
-			}
-		});
-	});
-	var featuresModalEl = document.getElementById('dwm-features-modal');
-	if (featuresModalEl) {
-		observer.observe(featuresModalEl, { attributes: true, attributeFilter: ['class'] });
-	}
-})();
-</script>

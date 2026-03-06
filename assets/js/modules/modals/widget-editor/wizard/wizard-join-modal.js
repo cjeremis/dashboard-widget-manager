@@ -30,10 +30,21 @@ import {
 } from './wizard-utils.js';
 
 import { ajax } from '../../../partials/ajax.js';
+import { ensureSearchableSelect, refreshSearchableSelect } from '../../../partials/searchable-select.js';
 import * as columnValidator from '../../../utilities/column-validator.js';
 import * as joinValidator from '../../../utilities/join-validator.js';
+import { buildNoResultsPreviewHtml } from '../output-preview-empty-state.js';
 
 const $ = jQuery;
+
+function refreshJoinSearchableSelects() {
+	ensureSearchableSelect( '#dwm-join-config-table', 'Select Primary Table' );
+	ensureSearchableSelect( '#dwm-join-config-local', 'Search primary columns...' );
+	ensureSearchableSelect( '#dwm-join-config-foreign', 'Search join columns...' );
+	refreshSearchableSelect( '#dwm-join-config-table' );
+	refreshSearchableSelect( '#dwm-join-config-local' );
+	refreshSearchableSelect( '#dwm-join-config-foreign' );
+}
 
 /**
  * Render wizard join rows from state (read-only summaries)
@@ -192,6 +203,7 @@ export function openJoinConfigModal( editIndex, editorContext ) {
 		primaryColOptions += '<option value="' + escAttr( fullName ) + '">' + escAttr( colName ) + '</option>';
 	});
 	$( '#dwm-join-config-local' ).html( primaryColOptions );
+	refreshJoinSearchableSelects();
 
 	// Update title with primary table name
 	if ( wizardState.joinConfigEditIndex >= 0 ) {
@@ -302,7 +314,7 @@ export function showValidationErrorModal( validation ) {
 	}
 
 	// Show modal
-	$modal.addClass( 'active' );
+	openModal( 'dwm-validation-error-modal' );
 }
 
 /**
@@ -313,6 +325,7 @@ export function checkJoinCompatibilityAndLoad( table ) {
 	$( '#dwm-join-config-local' )
 		.prop( 'disabled', true )
 		.html( '<option value="">Loading columns\u2026</option>' );
+	refreshSearchableSelect( '#dwm-join-config-local' );
 
 	// Get join table columns from cache or fetch
 	let joinColumns = getCachedColumnsForTable( table );
@@ -332,6 +345,8 @@ export function checkJoinCompatibilityAndLoad( table ) {
 			function() {
 				$( '#dwm-join-config-local' ).html( '<option value="">Failed to load</option>' );
 				$( '#dwm-join-config-foreign' ).html( '<option value="">Failed to load</option>' );
+				refreshSearchableSelect( '#dwm-join-config-local' );
+				refreshSearchableSelect( '#dwm-join-config-foreign' );
 			}
 		);
 	}
@@ -388,6 +403,7 @@ export function populatePrimaryColumnsWithDisabled() {
 	});
 
 	$( '#dwm-join-config-local' ).html( html );
+	refreshSearchableSelect( '#dwm-join-config-local' );
 }
 
 /**
@@ -405,6 +421,7 @@ export function populateForeignColumnsWithDisabled() {
 	});
 
 	$( '#dwm-join-config-foreign' ).html( html );
+	refreshSearchableSelect( '#dwm-join-config-foreign' );
 }
 
 /**
@@ -430,6 +447,7 @@ export function filterJoinColumnsByCompatibility( localCol ) {
 	});
 
 	$( '#dwm-join-config-foreign' ).html( html );
+	refreshSearchableSelect( '#dwm-join-config-foreign' );
 }
 
 /**
@@ -452,6 +470,7 @@ export function populateJoinConfigTables() {
 	});
 
 	$( '#dwm-join-config-table' ).html( tableOptions );
+	refreshSearchableSelect( '#dwm-join-config-table' );
 }
 
 /**
@@ -663,7 +682,7 @@ export function renderJoinOutputTable( results ) {
 	const $content = $( '#dwm-join-output-preview-content' );
 
 	if ( ! results || results.length === 0 ) {
-		$content.html( '<p class="dwm-output-empty">No results returned.</p>' );
+		$content.html( buildNoResultsPreviewHtml() );
 		return;
 	}
 

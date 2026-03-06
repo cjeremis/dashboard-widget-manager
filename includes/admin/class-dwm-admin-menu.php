@@ -36,6 +36,10 @@ class DWM_Admin_Menu {
 	 * Register admin menus.
 	 */
 	public function register_menus() {
+		if ( ! current_user_can( self::REQUIRED_CAP ) || ! DWM_Access_Control::current_user_can_access_plugin() ) {
+			return;
+		}
+
 		// Main menu page.
 		add_menu_page(
 			__( 'Widget Manager', 'dashboard-widget-manager' ),
@@ -47,14 +51,24 @@ class DWM_Admin_Menu {
 			31
 		);
 
-		// Dashboard submenu (default).
+		// Widgets submenu (default).
 		add_submenu_page(
 			'dashboard-widget-manager',
-			__( 'Dashboard', 'dashboard-widget-manager' ),
-			__( 'Dashboard', 'dashboard-widget-manager' ),
+			__( 'Widgets', 'dashboard-widget-manager' ),
+			__( 'Widgets', 'dashboard-widget-manager' ),
 			self::REQUIRED_CAP,
 			'dashboard-widget-manager',
 			array( $this, 'render_dashboard_page' )
+		);
+
+		// Branding submenu.
+		add_submenu_page(
+			'dashboard-widget-manager',
+			__( 'Branding', 'dashboard-widget-manager' ),
+			__( 'Branding', 'dashboard-widget-manager' ),
+			self::REQUIRED_CAP,
+			'dwm-customize-dashboard',
+			array( $this, 'render_customize_dashboard_page' )
 		);
 
 		// Settings submenu.
@@ -75,6 +89,16 @@ class DWM_Admin_Menu {
 			self::REQUIRED_CAP,
 			'dwm-tools',
 			array( $this, 'render_tools_page' )
+		);
+
+		// Integrations submenu.
+		add_submenu_page(
+			'dashboard-widget-manager',
+			__( 'Integrations', 'dashboard-widget-manager' ),
+			__( 'Integrations', 'dashboard-widget-manager' ),
+			self::REQUIRED_CAP,
+			'dwm-integrations',
+			array( $this, 'render_integrations_page' )
 		);
 
 		// Pro upgrade / add license key submenu.
@@ -100,7 +124,11 @@ class DWM_Admin_Menu {
 	 */
 	public static function is_plugin_page(): bool {
 		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : null;
-		return $page && strpos( $page, 'dashboard-widget-manager' ) === 0;
+		if ( ! $page ) {
+			return false;
+		}
+
+		return strpos( $page, 'dashboard-widget-manager' ) === 0 || strpos( $page, 'dwm-' ) === 0;
 	}
 
 	/**
@@ -249,7 +277,7 @@ class DWM_Admin_Menu {
 	 * Render dashboard page.
 	 */
 	public function render_dashboard_page() {
-		if ( ! current_user_can( self::REQUIRED_CAP ) ) {
+		if ( ! current_user_can( self::REQUIRED_CAP ) || ! DWM_Access_Control::current_user_can_access_plugin() ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'dashboard-widget-manager' ) );
 		}
 
@@ -261,7 +289,7 @@ class DWM_Admin_Menu {
 	 * Render settings page.
 	 */
 	public function render_settings_page() {
-		if ( ! current_user_can( self::REQUIRED_CAP ) ) {
+		if ( ! current_user_can( self::REQUIRED_CAP ) || ! DWM_Access_Control::current_user_can_access_plugin() ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'dashboard-widget-manager' ) );
 		}
 
@@ -273,11 +301,34 @@ class DWM_Admin_Menu {
 	 * Render tools page.
 	 */
 	public function render_tools_page() {
-		if ( ! current_user_can( self::REQUIRED_CAP ) ) {
+		if ( ! current_user_can( self::REQUIRED_CAP ) || ! DWM_Access_Control::current_user_can_access_plugin() ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'dashboard-widget-manager' ) );
 		}
 
 		// Load template.
 		require_once DWM_PLUGIN_DIR . 'templates/admin/tools.php';
+	}
+
+	/**
+	 * Render integrations page.
+	 */
+	public function render_integrations_page() {
+		if ( ! current_user_can( self::REQUIRED_CAP ) || ! DWM_Access_Control::current_user_can_access_plugin() ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'dashboard-widget-manager' ) );
+		}
+
+		require_once DWM_PLUGIN_DIR . 'templates/admin/integrations.php';
+	}
+
+	/**
+	 * Render Branding Page.
+	 */
+	public function render_customize_dashboard_page() {
+		if ( ! current_user_can( self::REQUIRED_CAP ) || ! DWM_Access_Control::current_user_can_access_plugin() ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'dashboard-widget-manager' ) );
+		}
+
+		// Load template.
+		require_once DWM_PLUGIN_DIR . 'templates/admin/customize-dashboard.php';
 	}
 }

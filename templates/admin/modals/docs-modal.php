@@ -31,18 +31,10 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 			</button>
 		</div>
 		<div class="dwm-modal-body">
-			<div class="dwm-docs-layout">
+			<div class="dwm-docs-layout dwm-sidebar-modal-layout">
 
 				<!-- Sidebar -->
-				<div class="dwm-docs-sidebar">
-					<div class="dwm-docs-search">
-						<input type="search"
-							class="dwm-docs-search-input"
-							data-docs-search
-							placeholder="<?php esc_attr_e( 'Search documentation...', 'dashboard-widget-manager' ); ?>"
-						>
-					</div>
-
+				<div class="dwm-docs-sidebar dwm-sidebar-modal-sidebar">
 					<!-- Filter Controls -->
 					<div class="dwm-docs-filter-controls">
 						<div class="dwm-docs-filter-row">
@@ -63,6 +55,14 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 								</span>
 							</label>
 						</div>
+					</div>
+
+					<div class="dwm-docs-search">
+						<input type="search"
+							class="dwm-docs-search-input"
+							data-docs-search
+							placeholder="<?php esc_attr_e( 'Search documentation...', 'dashboard-widget-manager' ); ?>"
+						>
 					</div>
 
 					<nav class="dwm-docs-nav">
@@ -120,7 +120,7 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 												<?php echo esc_html( $feature['title'] ); ?>
 												<?php if ( $is_coming ) : ?>
 													<span class="dwm-docs-coming-badge"><?php esc_html_e( 'Soon', 'dashboard-widget-manager' ); ?></span>
-												<?php elseif ( $is_pro ) : ?>
+												<?php elseif ( $is_pro && 'security' !== $category_slug ) : ?>
 													<span class="dwm-docs-pro-badge dwm-docs-accordion-badge"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
 												<?php endif; ?>
 											</button>
@@ -151,6 +151,15 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 								</button>
 								<div class="dwm-docs-accordion-panel" hidden>
 									<ul class="dwm-docs-submenu">
+										<li class="dwm-docs-submenu-item" data-search-title="integrations overview">
+											<button type="button"
+												class="dwm-docs-submenu-link"
+												data-docs-page="integrations-overview"
+											>
+												<span class="dashicons dashicons-info-outline" style="font-size:16px;width:16px;height:16px;margin-right:8px;color:#667eea;"></span>
+												<?php esc_html_e( 'Integrations Overview', 'dashboard-widget-manager' ); ?>
+											</button>
+										</li>
 										<?php foreach ( $integrations as $int_category_name => $int_items ) : ?>
 										<li class="dwm-docs-submenu-item" data-search-title="<?php echo esc_attr( strtolower( $int_category_name ) ); ?>">
 											<span class="dwm-docs-submenu-category-label"><?php echo esc_html( $int_category_name ); ?></span>
@@ -181,12 +190,38 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 				</div>
 
 				<!-- Sidebar Toggle -->
-				<button type="button" class="dwm-docs-sidebar-toggle" data-dwm-docs-sidebar-toggle aria-label="<?php esc_attr_e( 'Toggle sidebar', 'dashboard-widget-manager' ); ?>">
+				<button type="button" class="dwm-docs-sidebar-toggle dwm-features-sidebar-toggle" data-dwm-docs-sidebar-toggle aria-label="<?php esc_attr_e( 'Toggle sidebar', 'dashboard-widget-manager' ); ?>">
 					<span class="dashicons dashicons-arrow-left-alt2"></span>
 				</button>
 
 				<!-- Content area -->
-				<div class="dwm-docs-content" data-docs-content>
+				<div class="dwm-docs-content dwm-sidebar-modal-content" data-docs-content>
+					<div class="dwm-sidebar-modal-sticky-header" data-dwm-docs-sticky-header>
+						<div class="dwm-sidebar-modal-sticky-header-left">
+							<div class="dwm-sidebar-modal-sticky-title">
+								<span class="dwm-sidebar-modal-sticky-icon" data-dwm-docs-sticky-icon></span>
+								<div class="dwm-sidebar-modal-sticky-title-text">
+									<h3 data-dwm-docs-sticky-title><?php esc_html_e( 'Welcome', 'dashboard-widget-manager' ); ?></h3>
+								</div>
+								<span class="dwm-sidebar-modal-sticky-badge" data-dwm-docs-sticky-badge></span>
+							</div>
+						</div>
+						<div class="dwm-sidebar-modal-sticky-header-right">
+							<div class="dwm-sidebar-modal-page-nav" data-dwm-docs-page-nav>
+								<button type="button" class="dwm-sidebar-modal-nav-btn is-prev" data-dwm-docs-nav-direction="prev" aria-label="<?php esc_attr_e( 'Previous page', 'dashboard-widget-manager' ); ?>">
+									<span class="dashicons dashicons-arrow-left-alt2"></span>
+									<span class="dwm-nav-label" data-dwm-docs-prev-label><?php esc_html_e( 'Prev', 'dashboard-widget-manager' ); ?></span>
+								</button>
+								<button type="button" class="dwm-sidebar-modal-nav-btn is-next" data-dwm-docs-nav-direction="next" aria-label="<?php esc_attr_e( 'Next page', 'dashboard-widget-manager' ); ?>">
+									<span class="dwm-nav-label" data-dwm-docs-next-label><?php esc_html_e( 'Next', 'dashboard-widget-manager' ); ?></span>
+									<span class="dashicons dashicons-arrow-right-alt2"></span>
+								</button>
+								<button type="button" class="dwm-features-collapsed-search dwm-docs-collapsed-search" aria-label="<?php esc_attr_e( 'Search documentation', 'dashboard-widget-manager' ); ?>">
+									<span class="dashicons dashicons-search"></span>
+								</button>
+							</div>
+						</div>
+					</div>
 
 					<!-- Welcome page -->
 					<div class="dwm-docs-page is-active" data-docs-page-content="welcome">
@@ -506,6 +541,37 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 					endforeach;
 					?>
 
+
+					<!-- Integrations Overview page -->
+					<div class="dwm-docs-page" data-docs-page-content="integrations-overview">
+						<div class="dwm-docs-section">
+							<div class="dwm-docs-section-title-wrapper">
+								<span class="dashicons dashicons-admin-plugins" style="font-size:28px;width:28px;height:28px;color:#667eea;"></span>
+								<h2 class="dwm-docs-section-title">
+									<?php esc_html_e( 'Integrations Overview', 'dashboard-widget-manager' ); ?>
+								</h2>
+								<span class="dwm-docs-pro-badge dwm-docs-page-title-badge"><?php esc_html_e( 'PRO', 'dashboard-widget-manager' ); ?></span>
+							</div>
+							<p class="dwm-docs-section-description"><?php echo esc_html( $integrations_meta['description'] ?? '' ); ?></p>
+							<div class="dwm-docs-detail-block">
+								<h4><?php esc_html_e( 'About Integrations', 'dashboard-widget-manager' ); ?></h4>
+								<p><?php esc_html_e( 'Dashboard Widget Manager Pro integrations allow you to connect your WordPress dashboard with external services and tools. Each integration adds specialized widgets and data sources that pull real-time information directly into your dashboard.', 'dashboard-widget-manager' ); ?></p>
+							</div>
+							<div class="dwm-docs-detail-block">
+								<h4><?php esc_html_e( 'Available Categories', 'dashboard-widget-manager' ); ?></h4>
+								<ul>
+									<?php foreach ( $integrations as $cat_name => $cat_items ) : ?>
+										<li><strong><?php echo esc_html( $cat_name ); ?></strong> &mdash; <?php echo esc_html( count( $cat_items ) ); ?> <?php echo esc_html( _n( 'integration', 'integrations', count( $cat_items ), 'dashboard-widget-manager' ) ); ?></li>
+									<?php endforeach; ?>
+								</ul>
+							</div>
+							<div class="dwm-docs-detail-block">
+								<h4><?php esc_html_e( 'Getting Started', 'dashboard-widget-manager' ); ?></h4>
+								<p><?php esc_html_e( 'To use integrations, activate your Pro license and navigate to Settings to configure your integration credentials. Select any integration from the sidebar to learn more about its specific features and setup instructions.', 'dashboard-widget-manager' ); ?></p>
+							</div>
+						</div>
+					</div>
+
 					<!-- Integration pages -->
 					<?php foreach ( $integrations as $int_category_name => $int_items ) : ?>
 						<?php foreach ( $int_items as $integration ) : ?>
@@ -582,8 +648,13 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 		}
 	}
 
-	function openTargetModal(target) {
+	function openTargetModal(target, triggerEl) {
 		if (!target || target === 'dwm-docs-modal') {
+			return;
+		}
+
+		if (window.dwmModalAPI && typeof window.dwmModalAPI.open === 'function') {
+			window.dwmModalAPI.open(target, { trigger: triggerEl });
 			return;
 		}
 
@@ -606,10 +677,7 @@ $docs_plugin_name  = 'Dashboard Widget Manager';
 			const targetModal = modalShortcut.getAttribute('data-open-modal');
 			if (targetModal && targetModal !== 'dwm-docs-modal') {
 				e.preventDefault();
-				closeDocsModal();
-				setTimeout(function() {
-					openTargetModal(targetModal);
-				}, 180);
+				openTargetModal(targetModal, modalShortcut);
 				return;
 			}
 		}

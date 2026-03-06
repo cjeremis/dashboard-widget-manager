@@ -23,6 +23,7 @@ $publish_count  = 0;
 $draft_count    = 0;
 $archived_count = 0;
 $trash_count    = 0;
+$demo_count     = 0;
 
 foreach ( $widgets as $w ) {
 	$s = $w['status'] ?? 'draft';
@@ -31,6 +32,9 @@ foreach ( $widgets as $w ) {
 		case 'archived': $archived_count++; break;
 		case 'trash':    $trash_count++;    break;
 		default:         $draft_count++;    break;
+	}
+	if ( (int) ( $w['is_demo'] ?? 0 ) === 1 ) {
+		$demo_count++;
 	}
 }
 
@@ -116,6 +120,10 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 						<span class="dwm-status-separator">|</span>
 						<button type="button" class="dwm-status-filter" data-filter="trash"><span class="dwm-status-count"><?php echo esc_html( $trash_count ); ?></span> <?php esc_html_e( 'Trash', 'dashboard-widget-manager' ); ?></button>
 					<?php endif; ?>
+					<?php if ( $demo_count > 0 ) : ?>
+						<span class="dwm-status-separator">|</span>
+						<button type="button" class="dwm-status-filter" data-filter="demo"><span class="dwm-status-count"><?php echo esc_html( $demo_count ); ?></span> <?php esc_html_e( 'Demo', 'dashboard-widget-manager' ); ?></button>
+					<?php endif; ?>
 				</span>
 				<?php endif; ?>
 				<a href="#" class="dwm-button dwm-button-primary dwm-create-widget"><span class="dashicons dashicons-plus-alt2"></span><?php esc_html_e( 'Create New Widget', 'dashboard-widget-manager' ); ?></a>
@@ -196,6 +204,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 							data-widget-status="<?php echo esc_attr( $widget_status ); ?>"
 							data-widget-display="<?php echo esc_attr( $display_mode ); ?>"
 							data-widget-search="<?php echo esc_attr( $search_text ); ?>"
+							data-is-demo="<?php echo $is_demo ? '1' : '0'; ?>"
 							<?php if ( 'archived' === $widget_status || 'trash' === $widget_status ) echo ' style="display:none"'; ?>>
 
 							<?php
@@ -241,7 +250,21 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 							</div>
 
 							<div class="dwm-widget-card-body">
-								<div class="dwm-widget-card-actions">
+									<div class="dwm-widget-meta-items">
+										<div class="dwm-widget-meta-item">
+											<span class="dwm-widget-meta-label"><?php esc_html_e( 'Display:', 'dashboard-widget-manager' ); ?></span>
+											<span class="dwm-widget-meta-value"><?php echo esc_html( $display_mode_label ); ?></span>
+										</div>
+										<div class="dwm-widget-meta-item">
+											<span class="dwm-widget-meta-label"><?php esc_html_e( 'Cache:', 'dashboard-widget-manager' ); ?></span>
+											<span class="dwm-widget-meta-value"><?php echo esc_html( $cache_status_label ); ?></span>
+										</div>
+										<div class="dwm-widget-meta-item">
+											<span class="dwm-widget-meta-label"><?php esc_html_e( 'Theme:', 'dashboard-widget-manager' ); ?></span>
+											<span class="dwm-widget-meta-value"><?php echo esc_html( $theme_type_label ); ?></span>
+										</div>
+									</div>
+									<div class="dwm-widget-card-actions">
 									<button class="dwm-icon-button dwm-icon-button-edit dwm-edit-widget" data-widget-id="<?php echo esc_attr( $widget['id'] ); ?>" title="<?php esc_attr_e( 'Edit', 'dashboard-widget-manager' ); ?>">
 										<span class="dashicons dashicons-edit"></span>
 									</button>
@@ -271,18 +294,6 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 									<div class="dwm-widget-meta-item">
 										<span class="dwm-widget-meta-label"><?php esc_html_e( 'By:', 'dashboard-widget-manager' ); ?></span>
 										<span class="dwm-widget-meta-value"><?php echo esc_html( $author_name ); ?></span>
-									</div>
-									<div class="dwm-widget-meta-item">
-										<span class="dwm-widget-meta-label"><?php esc_html_e( 'Display:', 'dashboard-widget-manager' ); ?></span>
-										<span class="dwm-widget-meta-value"><?php echo esc_html( $display_mode_label ); ?></span>
-									</div>
-									<div class="dwm-widget-meta-item">
-										<span class="dwm-widget-meta-label"><?php esc_html_e( 'Cache:', 'dashboard-widget-manager' ); ?></span>
-										<span class="dwm-widget-meta-value"><?php echo esc_html( $cache_status_label ); ?></span>
-									</div>
-									<div class="dwm-widget-meta-item">
-										<span class="dwm-widget-meta-label"><?php esc_html_e( 'Theme:', 'dashboard-widget-manager' ); ?></span>
-										<span class="dwm-widget-meta-value"><?php echo esc_html( $theme_type_label ); ?></span>
 									</div>
 								</div>
 							</div>
@@ -354,10 +365,13 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 			<h2 id="dwm-editor-title">
 				<span class="dashicons dashicons-edit"></span>
 				<?php esc_html_e( 'Widget Editor', 'dashboard-widget-manager' ); ?>
-				<button type="button" class="dwm-switch-to-wizard" id="dwm-switch-to-wizard" style="display:none" title="<?php esc_attr_e( 'Switch to Wizard', 'dashboard-widget-manager' ); ?>">
-					<span class="dashicons dashicons-lightbulb"></span>
+				<button type="button" class="hey hey " id="dwm-editor-title-help" data-open-modal="dwm-docs-modal" data-docs-page="welcome" title="<?php esc_attr_e( 'Open documentation', 'dashboard-widget-manager' ); ?>">
+					<span class="dashicons heya dashicons-book-alt"></span>
 				</button>
 			</h2>
+			<button type="button" id="dwm-switch-to-scratch" class="dwm-switch-to-scratch dwm-help-icon-btn" title="<?php esc_attr_e( 'Switch to Manual mode', 'dashboard-widget-manager' ); ?>" style="display:none">
+				<span class="dashicons dashicons-editor-code"></span>
+			</button>
 			<button type="button" class="dwm-modal-close" aria-label="<?php esc_attr_e( 'Close modal', 'dashboard-widget-manager' ); ?>">
 				<span class="dashicons dashicons-no-alt"></span>
 			</button>
@@ -843,9 +857,13 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 			<?php require_once DWM_PLUGIN_DIR . 'templates/admin/widget-editor.php'; ?>
 		</div>
 		<!-- Shared Wizard Footer (sibling of modal body, shown only during wizard) -->
-		<div id="dwm-wizard-footer" class="dwm-wizard-footer" style="display:none">
-			<div class="dwm-wizard-footer-left">
-				<button type="button" class="dwm-wizard-start-over"><?php esc_html_e( 'Start Over', 'dashboard-widget-manager' ); ?></button>
+			<div id="dwm-wizard-footer" class="dwm-wizard-footer" style="display:none">
+				<div class="dwm-wizard-footer-left">
+					<button type="button" class="dwm-switch-to-scratch" title="<?php esc_attr_e( 'Switch to Manual mode', 'dashboard-widget-manager' ); ?>">
+						<span class="dashicons dashicons-editor-code"></span>
+						<?php esc_html_e( 'Manual Mode', 'dashboard-widget-manager' ); ?>
+					</button>
+					<button type="button" class="dwm-wizard-start-over"><?php esc_html_e( 'Start Over', 'dashboard-widget-manager' ); ?></button>
 				<button type="button" class="dwm-wizard-preview" title="<?php esc_attr_e( 'Preview widget', 'dashboard-widget-manager' ); ?>">
 					<span class="dashicons dashicons-visibility"></span>
 					<?php esc_html_e( 'Preview', 'dashboard-widget-manager' ); ?>
@@ -856,10 +874,18 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 				<button type="button" class="dwm-wizard-next"><?php esc_html_e( 'Next', 'dashboard-widget-manager' ); ?></button>
 			</div>
 		</div>
-		<div class="dwm-modal-footer">
-			<button type="submit" form="dwm-widget-form" class="dwm-button dwm-button-primary" id="dwm-save-widget" disabled>
-				<?php esc_html_e( 'Save Widget', 'dashboard-widget-manager' ); ?>
-			</button>
+		<div class="dwm-modal-footer dwm-widget-editor-footer">
+			<div class="dwm-widget-editor-footer-left">
+				<button type="button" class="dwm-button dwm-button-secondary dwm-footer-switch-to-wizard" id="dwm-switch-to-wizard" style="display:none" title="<?php esc_attr_e( 'Switch to Wizard', 'dashboard-widget-manager' ); ?>">
+					<span class="dashicons dashicons-lightbulb"></span>
+					<?php esc_html_e( 'Switch to Wizard', 'dashboard-widget-manager' ); ?>
+				</button>
+			</div>
+			<div class="dwm-widget-editor-footer-right">
+				<button type="submit" form="dwm-widget-form" class="dwm-button dwm-button-primary" id="dwm-save-widget" disabled>
+					<?php esc_html_e( 'Save Widget', 'dashboard-widget-manager' ); ?>
+				</button>
+			</div>
 		</div>
 	</div>
 </div>
@@ -1179,8 +1205,8 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 							<span class="dashicons dashicons-list-view"></span>
 							<?php esc_html_e( 'Output Preview', 'dashboard-widget-manager' ); ?>
 						</button>
+						<div id="dwm-join-validation-status" class="dwm-query-editor-validation-status" style="display:none"></div>
 					</div>
-					<div id="dwm-join-validation-status" class="dwm-join-validation-status" style="display:none"></div>
 					<div id="dwm-join-preview-query-pane" class="dwm-join-preview-pane active">
 						<div id="dwm-join-query-preview-content" class="dwm-join-query-preview-content empty"></div>
 					</div>
@@ -1264,8 +1290,8 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 							<span class="dashicons dashicons-list-view"></span>
 							<?php esc_html_e( 'Output Preview', 'dashboard-widget-manager' ); ?>
 						</button>
+						<div id="dwm-filter-validation-status" class="dwm-query-editor-validation-status" style="display:none"></div>
 					</div>
-					<div id="dwm-filter-validation-status" class="dwm-filter-validation-status" style="display:none"></div>
 					<div id="dwm-filter-preview-query-pane" class="dwm-filter-preview-pane active">
 						<div id="dwm-filter-query-preview-content" class="dwm-filter-query-preview-content empty"></div>
 					</div>
@@ -1329,8 +1355,8 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 							<span class="dashicons dashicons-list-view"></span>
 							<?php esc_html_e( 'Output Preview', 'dashboard-widget-manager' ); ?>
 						</button>
+						<div id="dwm-order-validation-status" class="dwm-query-editor-validation-status" style="display:none"></div>
 					</div>
-					<div id="dwm-order-validation-status" class="dwm-order-validation-status" style="display:none"></div>
 					<div id="dwm-order-preview-query-pane" class="dwm-order-preview-pane active">
 						<div id="dwm-order-query-preview-content" class="dwm-order-query-preview-content empty"></div>
 					</div>
@@ -1421,6 +1447,31 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 			<button type="button" class="dwm-button dwm-button-primary" id="dwm-widget-saved-done">
 				<?php esc_html_e( 'Done', 'dashboard-widget-manager' ); ?>
 			</button>
+		</div>
+	</div>
+</div>
+
+<!-- Query Logging Requirements Warning Modal -->
+<div id="dwm-query-logging-warning-modal" class="dwm-modal dwm-modal-sm">
+	<div class="dwm-modal-overlay"></div>
+	<div class="dwm-modal-content">
+		<div class="dwm-modal-header">
+			<h2>
+				<span class="dashicons dashicons-warning"></span>
+				<?php esc_html_e( 'Query Logging Requirements', 'dashboard-widget-manager' ); ?>
+			</h2>
+			<button type="button" class="dwm-modal-close" aria-label="<?php esc_attr_e( 'Close modal', 'dashboard-widget-manager' ); ?>">
+				<span class="dashicons dashicons-no-alt"></span>
+			</button>
+		</div>
+		<div class="dwm-modal-body">
+			<p><?php esc_html_e( 'Query logging requires the following constants to be set to', 'dashboard-widget-manager' ); ?> <code>true</code> <?php esc_html_e( 'in your', 'dashboard-widget-manager' ); ?> <code>wp-config.php</code>:</p>
+			<ul id="dwm-query-logging-missing-list" class="dwm-requirements-list"></ul>
+			<p><?php esc_html_e( 'If you choose Enable Anyway, the setting will be saved for this widget but no query logs will be written until the requirements above are met.', 'dashboard-widget-manager' ); ?></p>
+		</div>
+		<div class="dwm-modal-footer">
+			<button type="button" class="dwm-button dwm-button-secondary" id="dwm-query-logging-warning-cancel"><?php esc_html_e( 'Cancel', 'dashboard-widget-manager' ); ?></button>
+			<button type="button" class="dwm-button dwm-button-primary" id="dwm-query-logging-warning-enable-anyway"><?php esc_html_e( 'Enable Anyway', 'dashboard-widget-manager' ); ?></button>
 		</div>
 	</div>
 </div>

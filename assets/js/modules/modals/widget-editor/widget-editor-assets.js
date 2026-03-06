@@ -103,6 +103,7 @@ export function updateEditorThemeSectionForMode( mode ) {
 	$( '#dwm-editor-theme-title' ).text( modeTitleMap[ normalized ] || modeTitleMap.table );
 	$( '#dwm-editor-theme-desc' ).text( modeDescMap[ normalized ] || modeDescMap.table );
 	$( '#dwm-editor-theme-help' ).attr( 'data-docs-page', modeDocsMap[ normalized ] || modeDocsMap.table );
+	$( '#dwm-template-chart-settings' ).toggle( isChartDisplayMode( normalized ) );
 	[ 'table', 'list', 'button', 'card-list', 'bar', 'line', 'pie', 'doughnut' ].forEach( function( sectionMode ) {
 		$( '#dwm-editor-theme-options-' + sectionMode ).toggle( sectionMode === normalized );
 	} );
@@ -174,11 +175,25 @@ export function applyAutoThemeAssets( mode, theme, force ) {
 
 // ── Column aliases ──────────────────────────────────────────────────
 
+function normalizeAliasLabel( value ) {
+	const raw = String( value || '' );
+	const withSpaces = raw.replace( /_/g, ' ' );
+	const words = withSpaces.trim().split( /\s+/ ).filter( function( word ) {
+		return word.length > 0;
+	} );
+	if ( words.length === 0 ) {
+		return '';
+	}
+	return words.map( function( word ) {
+		return word.charAt( 0 ).toUpperCase() + word.slice( 1 ).toLowerCase();
+	} ).join( ' ' );
+}
+
 export function getColumnAliasesFromDOM() {
 	const aliases = {};
 	$( '#dwm-output-column-aliases-list .dwm-alias-row' ).each( function() {
 		const col   = $( this ).attr( 'data-column' );
-		const alias = $( this ).find( '.dwm-alias-input' ).val() || '';
+		const alias = normalizeAliasLabel( $( this ).find( '.dwm-alias-input' ).val() || '' );
 		if ( col ) {
 			aliases[ col ] = alias || col;
 		}

@@ -219,14 +219,14 @@ function loadTables() {
 }
 
 function populateTablesDropdown( tables ) {
-	let html = '<option value="">— select a table —</option>';
+	let html = '';
 	tables.forEach( function( tableName ) {
 		html += '<option value="' + tableName + '">' + tableName + '</option>';
 	} );
 	$( '#dwm-wizard-line-table-select' ).html( html );
 
 	const $builderSelect = $( '#dwm-builder-table' );
-	let builderHtml = '<option value="">— Select a table —</option>';
+	let builderHtml = '';
 	tables.forEach( function( tableName ) {
 		builderHtml += '<option value="' + tableName + '">' + tableName + '</option>';
 	} );

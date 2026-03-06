@@ -10,6 +10,7 @@
  */
 
 import { ajax } from '../../partials/ajax.js';
+import { ensureSearchableSelect, refreshSearchableSelect } from '../../partials/searchable-select.js';
 import {
 	state,
 	setCodeEditors, setSwitchTab,
@@ -22,6 +23,7 @@ import {
 } from './visual-builder-state.js';
 import {
 	scheduleBuild,
+	autoBuildAndValidate,
 	setLiveStatus,
 	syncStateFromDOM,
 } from './visual-builder-query.js';
@@ -40,6 +42,8 @@ export function initVisualBuilder( codeEditors, switchTabFn ) {
 	setSwitchTab( switchTabFn );
 
 	loadTables();
+	ensureSearchableSelect( '#dwm-builder-table', 'Select Primary Table', 'Search Tables' );
+	refreshSearchableSelect( '#dwm-builder-table' );
 	bindEvents();
 }
 
@@ -133,9 +137,10 @@ function loadTables() {
 
 	const cached = getCachedTables();
 	if ( cached ) {
-		$select.empty().append( '<option value="">— Select a table —</option>' );
 		cached.forEach( t => $select.append( `<option value="${ escHtml(t) }">${ escHtml(t) }</option>` ) );
 		if ( state.table ) $select.val( state.table );
+		ensureSearchableSelect( '#dwm-builder-table', 'Select Primary Table', 'Search Tables' );
+		refreshSearchableSelect( '#dwm-builder-table' );
 		return;
 	}
 
@@ -146,12 +151,15 @@ function loadTables() {
 		function( data ) {
 			const tables = data.tables || [];
 			cacheTables( tables );
-			$select.empty().append( '<option value="">— Select a table —</option>' );
 			tables.forEach( t => $select.append( `<option value="${ escHtml(t) }">${ escHtml(t) }</option>` ) );
 			if ( state.table ) $select.val( state.table );
+			ensureSearchableSelect( '#dwm-builder-table', 'Select Primary Table', 'Search Tables' );
+			refreshSearchableSelect( '#dwm-builder-table' );
 		},
 		function() {
 			$select.html( '<option value="">Failed to load tables</option>' );
+			ensureSearchableSelect( '#dwm-builder-table', 'Select Primary Table', 'Search Tables' );
+			refreshSearchableSelect( '#dwm-builder-table' );
 		}
 	);
 }
@@ -204,6 +212,7 @@ function loadColumnsForTable( table, callback ) {
 
 function renderColumnCheckboxes( columns ) {
 	const $list = $( '#dwm-builder-columns-list' ).empty();
+	$( '#dwm-builder-columns-controls' ).toggle( columns.length > 0 );
 
 	columns.forEach( col => {
 		const id      = `dwm-col-${ escAttr( col.name ) }`;
@@ -269,6 +278,7 @@ function renderOrders() {
 function updateChartLabelOptions() {
 	const $label  = $( '#dwm-builder-chart-label' ).empty();
 	const $data   = $( '#dwm-builder-chart-data-list' ).empty();
+	$data.removeClass( 'dwm-builder-checkboxes--single' );
 	const mode    = state.displayMode || 'table';
 	const singleValueMode = mode === 'pie' || mode === 'doughnut';
 
@@ -299,11 +309,28 @@ function updateChartLabelOptions() {
 		return;
 	}
 
+	if ( singleValueMode ) {
+		const selectedValue = state.chartDataColumns[ 0 ] || numericCols[ 0 ].name;
+		let optionsHtml = '<option value="">— Select numeric column —</option>';
+
+		numericCols.forEach( function( col ) {
+			const selected = col.name === selectedValue ? ' selected' : '';
+			optionsHtml += '<option value="' + escAttr( col.name ) + '"' + selected + '>' + escHtml( col.name ) + ' (' + escHtml( col.type || '' ) + ')</option>';
+		} );
+
+		$data.append(
+			'<select id="dwm-builder-chart-data-select" class="dwm-select">' +
+				optionsHtml +
+			'</select>'
+		);
+		return;
+	}
+
 	numericCols.forEach( col => {
 		const id      = `dwm-chart-data-${ escAttr(col.name) }`;
 		const checked = state.chartDataColumns.includes( col.name ) ? 'checked' : '';
-		const inputType = singleValueMode ? 'radio' : 'checkbox';
-		const inputName = singleValueMode ? 'dwm_builder_chart_data_single' : '';
+		const inputType = 'checkbox';
+		const inputName = '';
 		$data.append(`
 			<label class="dwm-col-checkbox" for="${ id }">
 				<input type="${ inputType }" ${ inputName ? `name="${ inputName }"` : '' } id="${ id }" value="${ escAttr(col.name) }" ${ checked }>
@@ -312,6 +339,10 @@ function updateChartLabelOptions() {
 			</label>
 		`);
 	} );
+
+	if ( numericCols.length === 1 ) {
+		$data.addClass( 'dwm-builder-checkboxes--single' );
+	}
 }
 
 function getAllAvailableColumns() {
@@ -337,9 +368,7 @@ function updatePostColumnsSections() {
 function toggleChartOptions( mode ) {
 	const isChart = isChartDisplayMode( mode );
 	$( '#dwm-builder-chart-options' ).toggle( isChart );
-	$( '.dwm-chart-mode-notice' ).toggle( isChart );
 	updateChartConfigUiForMode( mode );
-	updateChartModeNotices( mode );
 }
 
 // ── JOIN rows ────────────────────────────────────────────────────────────────
@@ -483,17 +512,7 @@ function updateChartConfigUiForMode( mode ) {
 			: 'Configure label and numeric dataset columns for this chart.'
 	);
 	$( '#dwm-builder-chart-label-title' ).text( isPieLike ? 'Label Column *' : 'X-Axis Label Column *' );
-	$( '#dwm-builder-chart-label-desc' ).text(
-		isPieLike
-			? 'Column used for slice labels in the chart legend.'
-			: 'Column used for X-axis labels.'
-	);
 	$( '#dwm-builder-chart-data-title' ).text( isPieLike ? 'Value Column *' : 'Y-Axis Data Column(s) *' );
-	$( '#dwm-builder-chart-data-desc' ).text(
-		isPieLike
-			? 'Choose one numeric column for slice values.'
-			: 'Choose one or more numeric columns for chart series.'
-	);
 
 	const helpLabel = modeName + ' Chart Configuration help';
 	$( '#dwm-builder-chart-config-help' )
@@ -502,24 +521,22 @@ function updateChartConfigUiForMode( mode ) {
 		.attr( 'title', helpLabel );
 }
 
-function updateChartModeNotices( mode ) {
-	const isChart = isChartDisplayMode( mode );
-	if ( ! isChart ) {
-		return;
-	}
-	const modeName = mode === 'line' ? 'Line' : mode === 'pie' ? 'Pie' : mode === 'doughnut' ? 'Doughnut' : 'Bar';
-	$( '.dwm-chart-mode-notice p' ).each( function() {
-		const $text = $( this );
-		const current = $text.text();
-		const normalized = current.replace( /^(Bar|Line|Pie|Doughnut)\s+chart mode/i, 'Chart mode' );
-		const next = normalized.replace( /^Chart mode/i, modeName + ' chart mode' );
-		$text.html( '<span class=\"dashicons dashicons-chart-bar\"></span> ' + escHtml( next ) );
-	} );
-}
-
 // ── Events ───────────────────────────────────────────────────────────────────
 
 function bindEvents() {
+	// Column select all / deselect all.
+	$( document ).on( 'click', '#dwm-builder-select-all-cols', function( e ) {
+		e.preventDefault();
+		$( '#dwm-builder-columns-list input[type=checkbox]' ).prop( 'checked', true ).trigger( 'change' );
+		scheduleBuild();
+	} );
+
+	$( document ).on( 'click', '#dwm-builder-deselect-all-cols', function( e ) {
+		e.preventDefault();
+		$( '#dwm-builder-columns-list input[type=checkbox]' ).prop( 'checked', false ).trigger( 'change' );
+		scheduleBuild();
+	} );
+
 	// Table selection.
 	$( document ).on( 'change', '#dwm-builder-table', function() {
 		const newTable  = $( this ).val();
@@ -596,9 +613,14 @@ function bindEvents() {
 	// Limit toggle.
 	$( document ).on( 'change', '#dwm-builder-limit-toggle', function() {
 		const enabled = $( this ).is( ':checked' );
+		if ( enabled ) {
+			const normalizedLimit = Math.max( 1, Math.min( 1000, parseInt( $( '#dwm-builder-limit' ).val(), 10 ) || 10 ) );
+			state.limit = normalizedLimit;
+			$( '#dwm-builder-limit' ).val( normalizedLimit );
+		}
 		state.noLimit = ! enabled;
 		$( '.dwm-builder-limit-input' ).toggle( enabled );
-		scheduleBuild();
+		autoBuildAndValidate();
 	} );
 
 	// Limit change.
@@ -610,7 +632,7 @@ function bindEvents() {
 	$( document ).on( 'change', '#dwm-builder-chart-label, #dwm-builder-chart-data-list input[type=checkbox], #dwm-builder-chart-legend', function() {
 		scheduleBuild();
 	} );
-	$( document ).on( 'change', '#dwm-builder-chart-data-list input[type=radio], #dwm-builder-chart-theme', function() {
+	$( document ).on( 'change', '#dwm-builder-chart-data-select, #dwm-builder-chart-theme', function() {
 		scheduleBuild();
 	} );
 	$( document ).on( 'input', '#dwm-builder-chart-title', function() {

@@ -53,7 +53,8 @@
 	}
 
 	function isDirty() {
-		return !!$('#dwm-status-change-select').val();
+		var selected = $('#dwm-status-change-select').val();
+		return !!selected && selected !== currentWidgetStatus;
 	}
 
 	function updateApplyState() {
@@ -74,12 +75,18 @@
 		$('#dwm-status-change-tagline').html('Currently <strong>' + currentLabel + '</strong>');
 
 		STATUS_OPTIONS.forEach(function(opt) {
-			if (opt.db === widgetStatus) return; // skip current status
 			$select.append('<option value="' + opt.db + '">' + opt.label + '</option>');
 		});
 
-		$('#dwm-status-change-description').hide().empty();
-		$('#dwm-status-change-apply').prop('disabled', true);
+		$select.val(widgetStatus);
+
+		var initialDescription = DESCRIPTIONS[widgetStatus] || '';
+		if (initialDescription) {
+			$('#dwm-status-change-description').text(initialDescription).show();
+		} else {
+			$('#dwm-status-change-description').hide().empty();
+		}
+		updateApplyState();
 	}
 
 	function executeStatusChange(dbStatus) {

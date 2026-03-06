@@ -31,7 +31,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 	<?php $all_widgets = $data->get_widgets(); ?>
 
 	<!-- Export Data -->
-	<div class="dwm-section">
+	<div id="dwm-section-export-data" class="dwm-section">
 		<?php
 		$title             = __( 'Export Data', 'dashboard-widget-manager' );
 		$help_modal_target = 'dwm-docs-modal';
@@ -64,7 +64,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 	</div>
 
 	<!-- Import Data -->
-	<div class="dwm-section">
+	<div id="dwm-section-import-data" class="dwm-section">
 		<?php
 		$title             = __( 'Import Data', 'dashboard-widget-manager' );
 		$help_modal_target = 'dwm-docs-modal';
@@ -136,7 +136,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 	</div>
 
 	<!-- Clear Caches -->
-	<div class="dwm-section">
+	<div id="dwm-section-clear-caches" class="dwm-section">
 		<?php
 		$title             = __( 'Clear Caches', 'dashboard-widget-manager' );
 		$help_modal_target = 'dwm-docs-modal';
@@ -155,7 +155,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 	</div>
 
 	<!-- Demo Data -->
-	<div class="dwm-section">
+	<div id="dwm-section-demo-data" class="dwm-section">
 		<?php
 		$title             = __( 'Demo Data', 'dashboard-widget-manager' );
 		$help_modal_target = 'dwm-docs-modal';
@@ -200,7 +200,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 	</div>
 
 	<!-- Reset Data -->
-	<div class="dwm-section">
+	<div id="dwm-section-reset-data" class="dwm-section">
 		<?php
 		$title             = __( 'Reset Data', 'dashboard-widget-manager' );
 		$help_modal_target = 'dwm-docs-modal';
@@ -233,10 +233,6 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 ob_start();
 ?>
 <div class="dwm-export-options">
-	<p class="dwm-export-intro">
-		<?php esc_html_e( 'Select which data to include in your export file.', 'dashboard-widget-manager' ); ?>
-	</p>
-
 	<div class="dwm-export-toggle-group">
 		<div class="dwm-export-toggle-row">
 			<label class="dwm-toggle-switch">
@@ -401,8 +397,6 @@ ob_start();
 	<input type="hidden" name="action" value="dwm_reset_data" />
 </form>
 <div class="dwm-reset-options">
-	<p class="dwm-reset-intro"><?php esc_html_e( 'Select which data to permanently delete.', 'dashboard-widget-manager' ); ?></p>
-
 	<div class="dwm-reset-warning">
 		<span class="dashicons dashicons-warning"></span>
 		<div>

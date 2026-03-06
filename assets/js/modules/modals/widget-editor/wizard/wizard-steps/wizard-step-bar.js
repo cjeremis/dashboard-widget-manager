@@ -264,7 +264,7 @@ function loadTables() {
 }
 
 function populateTablesDropdown( tables ) {
-	let html = '<option value="">— select a table —</option>';
+	let html = '';
 	tables.forEach( function( tableName ) {
 		html += '<option value="' + tableName + '">' + tableName + '</option>';
 	} );
@@ -273,7 +273,7 @@ function populateTablesDropdown( tables ) {
 
 	// Keep builder dropdown synced with wizard table list.
 	const $builderSelect = $( '#dwm-builder-table' );
-	let builderHtml = '<option value="">— Select a table —</option>';
+	let builderHtml = '';
 	tables.forEach( function( tableName ) {
 		builderHtml += '<option value="' + tableName + '">' + tableName + '</option>';
 	} );

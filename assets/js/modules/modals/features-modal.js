@@ -22,6 +22,7 @@
 			sidebarToggle: '[data-dwm-features-sidebar-toggle]',
 			stickyHeader: '[data-dwm-features-sticky-header]',
 			stickyTitle: '[data-dwm-sticky-title]',
+			stickyDescription: '[data-dwm-sticky-description]',
 			stickyIcon: '[data-dwm-sticky-icon]',
 			stickyBadge: '[data-dwm-sticky-badge]',
 			pageContainer: '[data-dwm-features-content]',
@@ -33,15 +34,9 @@
 		},
 
 		/**
-		 * Collapsed search button (dynamically created, docs-modal pattern)
-		 */
-		$collapsedSearch: null,
-
-		/**
 		 * Initialize the module
 		 */
 		init: function() {
-			this.$collapsedSearch = $('<button type="button" class="dwm-features-collapsed-search" aria-label="Search features"><span class="dashicons dashicons-search"></span></button>');
 			this.bindEvents();
 		},
 
@@ -104,7 +99,6 @@
 			this.updateStickyHeader();
 			this.updatePageNavigation();
 			this.restoreSidebarState();
-			this.placeCollapsedSearch();
 		},
 
 		/**
@@ -123,7 +117,8 @@
 		 */
 		onPageChange: function($button) {
 			var pageId = $button.data('dwm-features-page');
-			var $page = $('[data-dwm-features-page-content="' + pageId + '"]');
+			var $modal = $(this.selectors.modal);
+			var $page = $modal.find('[data-dwm-features-page-content="' + pageId + '"]');
 
 			if (!$page.length) {
 				return;
@@ -146,16 +141,14 @@
 			// Update navigation buttons
 			this.updatePageNavigation();
 
-			// Reposition collapsed search
-			this.placeCollapsedSearch();
 		},
 
 		/**
 		 * Navigate to next or previous page
 		 */
 		navigatePages: function(direction) {
-			var $activeMenu = $(this.selectors.menuLinks + '.is-active');
-			var $allMenus = $(this.selectors.menuLinks);
+			var $activeMenu = $(this.selectors.menuLinks + '.is-active:visible');
+			var $allMenus = $(this.selectors.menuLinks + ':visible');
 			var currentIndex = $allMenus.index($activeMenu);
 			var nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
 
@@ -168,16 +161,36 @@
 		 * Update sticky header with current page info
 		 */
 		updateStickyHeader: function() {
-			var $activePage = $(this.selectors.pages + '.is-active');
-			var title = $activePage.data('page-title') || 'Features';
-			var icon = $activePage.data('page-icon') || '';
+			var $modal = $(this.selectors.modal);
+			var $activePage = $modal.find(this.selectors.pages + '.is-active').first();
+			var title = $activePage.data('page-title') ||
+				$activePage.find('.dwm-sidebar-modal-page-header [data-dwm-page-title]').first().text().trim() ||
+				$modal.find(this.selectors.menuLinks + '.is-active').clone().children().remove().end().text().trim() ||
+				'Features';
+			var description = $activePage.find('.dwm-sidebar-modal-page-header p').first().text().trim();
+			var $activeMenu = $modal.find(this.selectors.menuLinks + '.is-active').first();
+			var iconClass = $activeMenu.find('.dashicons').attr('class') || '';
+			var $menuLogo = $activeMenu.find('.dwm-sidebar-modal-menu-logo').first();
+			var $stickyIcon = $(this.selectors.stickyIcon);
 
 			// Update sticky header text
 			$(this.selectors.stickyTitle).text(title);
+			$(this.selectors.stickyDescription).text(description).toggle(!!description);
 
-			// Update icon if available
-			if (icon) {
-				$(this.selectors.stickyIcon).text(this.getCategoryIcon(icon));
+			// Hide duplicated in-page header (title/description now shown in sticky header)
+			$(this.selectors.pages).removeClass('has-sticky-summary');
+			$activePage.addClass('has-sticky-summary');
+
+			// Mirror the active menu icon, using the overview logo when available.
+			if ($menuLogo.length) {
+				$stickyIcon
+					.attr('class', 'dwm-sidebar-modal-sticky-icon has-logo')
+					.empty()
+					.append($menuLogo.clone().removeClass('dwm-sidebar-modal-menu-logo').addClass('dwm-sidebar-modal-sticky-logo'));
+			} else {
+				$stickyIcon
+					.attr('class', iconClass ? 'dwm-sidebar-modal-sticky-icon ' + iconClass : 'dwm-sidebar-modal-sticky-icon')
+					.text('');
 			}
 
 			// Show/hide badge for non-overview pages
@@ -193,48 +206,35 @@
 		 * Update next/previous button visibility
 		 */
 		updatePageNavigation: function() {
-			var $activeMenu = $(this.selectors.menuLinks + '.is-active');
-			var $allMenus = $(this.selectors.menuLinks);
+			var $activeMenu = $(this.selectors.menuLinks + '.is-active:visible');
+			var $allMenus = $(this.selectors.menuLinks + ':visible');
 			var currentIndex = $allMenus.index($activeMenu);
 			var hasPrev = currentIndex > 0;
 			var hasNext = currentIndex < $allMenus.length - 1;
 
 			var $prevBtn = $(this.selectors.navButtons + '.is-prev');
 			var $nextBtn = $(this.selectors.navButtons + '.is-next');
+			var prevLabel = hasPrev ? this.getMenuLabel($allMenus.eq(currentIndex - 1)) : '';
+			var nextLabel = hasNext ? this.getMenuLabel($allMenus.eq(currentIndex + 1)) : '';
 
+			$prevBtn.find('[data-dwm-prev-label]').text(prevLabel ? 'Prev: ' + prevLabel : 'Prev');
+			$nextBtn.find('[data-dwm-next-label]').text(nextLabel ? 'Next: ' + nextLabel : 'Next');
+			$prevBtn.attr('aria-label', prevLabel ? 'Previous: ' + prevLabel : 'Previous');
+			$nextBtn.attr('aria-label', nextLabel ? 'Next: ' + nextLabel : 'Next');
 			$prevBtn.prop('disabled', !hasPrev).toggle(hasPrev);
 			$nextBtn.prop('disabled', !hasNext).toggle(hasNext);
 		},
 
-		/**
-		 * Place collapsed search button in sticky header right
-		 */
-		placeCollapsedSearch: function() {
-			if (!this.$collapsedSearch) return;
-			var $headerRight = $(this.selectors.modal).find('.dwm-sidebar-modal-sticky-header-right');
-			if ($headerRight.length) {
-				this.$collapsedSearch.prependTo($headerRight);
+		getMenuLabel: function($menuLink) {
+			if (!$menuLink || !$menuLink.length) {
+				return '';
 			}
+
+			var $clone = $menuLink.clone();
+			$clone.find('.dashicons, .dwm-sidebar-modal-menu-pro-badge, .dwm-sidebar-modal-menu-count').remove();
+			return $clone.text().replace(/\s+/g, ' ').trim();
 		},
 
-		/**
-		 * Get icon emoji for category
-		 */
-		getCategoryIcon: function(iconName) {
-			var iconMap = {
-				'chart-bar': '📊',
-				'search': '🔍',
-				'database': '💾',
-				'art': '🎨',
-				'layout': '📐',
-				'admin-plugins': '🔌',
-				'performance': '⚡',
-				'code-standards': '</>',
-				'integrations': '🔗',
-				'filter': '🔍'
-			};
-			return iconMap[iconName] || '•';
-		},
 
 		/**
 		 * Restore sidebar state from sessionStorage

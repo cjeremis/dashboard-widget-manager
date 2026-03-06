@@ -16,6 +16,7 @@ import '../modules/partials/toast.js';
 import { initModals } from '../modules/modals/modals.js';
 import '../modules/modals/notifications-panel.js';
 import '../modules/modals/docs-modal.js';
+import '../modules/modals/features-modal.js';
 import '../modules/modals/support-modal.js';
 import '../modules/partials/url-params.js';
 

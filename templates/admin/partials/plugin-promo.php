@@ -17,12 +17,12 @@ $plugins_img_url = DWM_PLUGIN_URL . 'assets/images/plugins/';
 
 $promo_plugins = array(
 	array(
-		'slug'        => 'cta-manager',
-		'logo'        => $plugins_img_url . 'cta-manager-logo.png',
+		'slug'        => 'dwm-manager',
+		'logo'        => $plugins_img_url . 'dwm-manager-logo.png',
 		'title'       => __( 'CTA Manager', 'dashboard-widget-manager' ),
 		'tagline'     => __( 'Convert More Visitors', 'dashboard-widget-manager' ),
 		'description' => __( 'Create, manage, and track conversion-focused calls-to-action with targeting rules, A/B testing, and real-time analytics.', 'dashboard-widget-manager' ),
-		'url'         => 'https://topdevamerica.com/plugins/cta-manager',
+		'url'         => 'https://topdevamerica.com/plugins/dwm-manager',
 		'color_class' => 'dwm-promo-card--orange',
 	),
 	array(
