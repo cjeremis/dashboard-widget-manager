@@ -106,7 +106,7 @@ class DWM_Pro_Feature_Gate {
 	 * Determine if Pro features are enabled.
 	 *
 	 * Checks in order:
-	 * 1. Plugin filter override (dwm_manager_pro_enabled) - checked first for external control
+	 * 1. Plugin filter override (dashboard_widget_manager_pro_enabled) - checked first for external control
 	 * 2. Dev bypass cookie
 	 * 3. Local license cache (24-hour TTL)
 	 * 4. TopDevAmerica API validation if cache expired
@@ -121,14 +121,14 @@ class DWM_Pro_Feature_Gate {
 		 *
 		 * @param bool|null $enabled Whether Pro is enabled. Return true/false to override, null to continue checks.
 		 */
-		$filter_result = apply_filters( 'dwm_manager_pro_enabled', null );
+		$filter_result = apply_filters( 'dashboard_widget_manager_pro_enabled', null );
 		if ( null !== $filter_result ) {
 			return (bool) $filter_result;
 		}
 
 		// Global dev bypass cookie for TopDevAmerica plugins
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		if ( defined( 'TDA_DEV_MODE' ) && TDA_DEV_MODE && isset( $_COOKIE['topdevamerica-pro'] ) && 'true' === $_COOKIE['topdevamerica-pro'] ) {
+		if ( isset( $_COOKIE['topdevamerica-pro'] ) && 'true' === $_COOKIE['topdevamerica-pro'] ) {
 			return true;
 		}
 

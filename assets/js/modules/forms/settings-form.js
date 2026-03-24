@@ -54,6 +54,365 @@ function getSettingLabel($input) {
 function initSettingsForm() {
 	const DWMToast = window.DWMToast;
 	let $activeSubmitBtn = null;
+	let _dwmState        = null; // state API exposed by the floating-save IIFE
+
+
+
+(function ($) {
+	// ── State ─────────────────────────────────────────────────────────────────
+	const dirtyFields    = new Set();  // setting keys with unsaved changes
+	const dirtySections  = new Set();  // section elements with unsaved changes
+	const fieldOriginals = new Map();  // fieldKey → original value (snapshotted at init)
+	const fieldMessages  = new Map();  // fieldKey → { type, message } for replay
+	let isSaving = false;
+
+	const STATE_CLASSES = 'dwm-dirty dwm-saving dwm-save-error dwm-save-warning dwm-save-animating';
+
+	// ── Floating save button ───────────────────────────────────────────────────
+	function ensureFloatingSaveButton() {
+		if ($('#dwm-floating-save').length) return;
+
+		$('head').append(`
+			<style>
+				#dwm-floating-save {
+					position: fixed;
+					right: 20px;
+					bottom: 20px;
+					z-index: 99999;
+					display: none;
+					padding: 12px 18px;
+					border: 0;
+					border-radius: 8px;
+					cursor: pointer;
+					box-shadow: 0 8px 24px rgba(0,0,0,.18);
+				}
+				#dwm-floating-save.is-visible { display: inline-flex; }
+				#dwm-floating-save[disabled] { opacity: .7; cursor: not-allowed; }
+			</style>
+		`);
+
+		$('body').append(`
+			<button type="button" id="dwm-floating-save" class="dwm-button dwm-button-primary">
+				Save Changes
+			</button>
+		`);
+	}
+
+	// ── Helpers ────────────────────────────────────────────────────────────────
+	function getSectionSubmitBtn(section) {
+		return $(section).find('button[type="submit"], input[type="submit"]').first();
+	}
+
+	// Checkbox grid classes have no name attr — map them to their hidden input's setting key.
+	function getFieldKey($el) {
+		if ($el.hasClass('dwm-widget-hide-checkbox'))              return 'hidden_dashboard_widgets';
+		if ($el.hasClass('dwm-third-party-widget-hide-checkbox'))  return 'hidden_third_party_dashboard_widgets';
+		if ($el.hasClass('dwm-access-role-checkbox'))              return 'access_allowed_roles';
+		if ($el.hasClass('dwm-table-checkbox'))                    return 'excluded_tables';
+		const name  = $el.attr('name') || '';
+		const match = name.match(/settings\[([^\]]+)\]/);
+		return match ? match[1] : null;
+	}
+
+	// ── Original value snapshot ────────────────────────────────────────────────
+
+	// Classes whose true value lives in a hidden input — skip in the visible-input loop.
+	const GRID_CHECKBOX_CLASSES = [
+		'dwm-widget-hide-checkbox',
+		'dwm-third-party-widget-hide-checkbox',
+		'dwm-access-role-checkbox',
+		'dwm-table-checkbox',
+	];
+
+	function snapshotOriginals() {
+		// All hidden inputs with settings[key] names represent grid values — snapshot all of them.
+		$('#dwm-settings-form').find('input[type="hidden"][name]').each(function () {
+			const match = ($(this).attr('name') || '').match(/settings\[([^\]]+)\]/);
+			if (match) fieldOriginals.set(match[1], $(this).val() ?? '');
+		});
+
+		// Snapshot visible inputs, skipping any grid checkboxes tracked above.
+		$('#dwm-settings-form')
+			.find('input:not([type="hidden"]):not([data-autosave]), select:not([data-autosave]), textarea:not([data-autosave])')
+			.each(function () {
+				const $el = $(this);
+				if (GRID_CHECKBOX_CLASSES.some(c => $el.hasClass(c))) return;
+				const key = getFieldKey($el);
+				if (!key || fieldOriginals.has(key)) return;
+				fieldOriginals.set(key, $el.is('[type="checkbox"]') ? $el.is(':checked') : String($el.val() ?? ''));
+			});
+	}
+
+	function isReverted($el) {
+		const key = getFieldKey($el);
+		if (!key || !fieldOriginals.has(key)) return false;
+		const original = fieldOriginals.get(key);
+		const current  = $el.is('[type="checkbox"]') ? $el.is(':checked') : String($el.val() ?? '');
+		return current === original;
+	}
+
+	// ── Floating button label ──────────────────────────────────────────────────
+	function updateFloatingSaveButton() {
+		const $btn  = $('#dwm-floating-save');
+		const count = dirtyFields.size;
+		if (count > 0) {
+			$btn.addClass('is-visible').prop('disabled', false)
+				.text('Save ' + count + ' Setting' + (count === 1 ? '' : 's'));
+		} else {
+			$btn.removeClass('is-visible');
+		}
+	}
+
+	// ── Collect inputs for batch AJAX ──────────────────────────────────────────
+	function collectSectionSettings(section) {
+		const settings = {};
+		$(section).find('input, select, textarea').not('[data-autosave]').each(function () {
+			const name  = $(this).attr('name');
+			if (!name) return;
+			const match = name.match(/settings\[([^\]]+)\]/);
+			if (!match) return;
+			settings[match[1]] = $(this).is('[type="checkbox"]') ? ($(this).is(':checked') ? 1 : 0) : $(this).val();
+		});
+		return settings;
+	}
+
+	// ── Visual state setters ───────────────────────────────────────────────────
+	function setSavingState(sections) {
+		sections.forEach(function (section) {
+			$(section).removeClass(STATE_CLASSES).addClass('dwm-saving');
+			$(section).find('.dwm-form-group').filter('.dwm-dirty, .dwm-save-error, .dwm-save-warning')
+				.removeClass(STATE_CLASSES).addClass('dwm-saving');
+		});
+	}
+
+	function setSuccessState(sections) {
+		sections.forEach(function (section) {
+			$(section).removeClass(STATE_CLASSES);
+			$(section).find('.dwm-form-group').removeClass(STATE_CLASSES);
+			$(section).find('.dwm-field-status-icon').remove();
+		});
+		// Re-snapshot to treat saved state as the new baseline.
+		$('#dwm-settings-form').find('input[type="hidden"][name]').each(function () {
+			const match = ($(this).attr('name') || '').match(/settings\[([^\]]+)\]/);
+			if (match) fieldOriginals.set(match[1], $(this).val() ?? '');
+		});
+		$('#dwm-settings-form')
+			.find('input:not([type="hidden"]):not([data-autosave]), select:not([data-autosave]), textarea:not([data-autosave])')
+			.each(function () {
+				const $el = $(this);
+				if (GRID_CHECKBOX_CLASSES.some(c => $el.hasClass(c))) return;
+				const key = getFieldKey($el);
+				if (key) fieldOriginals.set(key, $el.is('[type="checkbox"]') ? $el.is(':checked') : String($el.val() ?? ''));
+			});
+		fieldMessages.clear();
+	}
+
+	function setErrorState(sections, message) {
+		sections.forEach(function (section) {
+			$(section).removeClass(STATE_CLASSES).addClass('dwm-save-error dwm-save-animating');
+			$(section).find('.dwm-form-group').filter('.dwm-saving, .dwm-dirty')
+				.removeClass(STATE_CLASSES).addClass('dwm-save-error dwm-save-animating');
+			$(section).find('.dwm-form-group.dwm-save-error').each(function () {
+				injectStatusIcon($(this), 'error', message);
+			});
+		});
+	}
+
+	function setWarningState(sections, message) {
+		sections.forEach(function (section) {
+			$(section).removeClass(STATE_CLASSES).addClass('dwm-save-warning dwm-save-animating');
+			$(section).find('.dwm-form-group').filter('.dwm-saving')
+				.removeClass(STATE_CLASSES).addClass('dwm-save-warning dwm-save-animating');
+			$(section).find('.dwm-form-group.dwm-save-warning').each(function () {
+				injectStatusIcon($(this), 'warning', message);
+			});
+		});
+	}
+
+	function stopAnimation(sections) {
+		sections.forEach(function (section) {
+			$(section).removeClass('dwm-save-animating');
+			$(section).find('.dwm-form-group').removeClass('dwm-save-animating');
+		});
+	}
+
+	// ── Status icon (error / warning next to field label) ─────────────────────
+	function injectStatusIcon($group, type, message) {
+		$group.find('.dwm-field-status-icon').remove();
+		const iconClass = type === 'error' ? 'dashicons-warning' : 'dashicons-flag';
+		const title     = type === 'error' ? 'Save failed — click to replay' : 'Save warning — click to replay';
+		const $icon = $('<span>')
+			.addClass('dwm-field-status-icon dwm-field-status-' + type)
+			.attr('title', title)
+			.append($('<span>').addClass('dashicons ' + iconClass));
+		$icon.data('replay-message', message).data('replay-type', type);
+		const $label = $group.find('.dwm-form-label, label:not(.dwm-toggle):not(.dwm-table-checkbox-label)').first();
+		if ($label.length) $label.after($icon);
+	}
+
+	// ── finishSaving ───────────────────────────────────────────────────────────
+	function finishSaving() {
+		isSaving = false;
+		dirtyFields.clear();
+		dirtySections.clear();
+		$('#dwm-floating-save').prop('disabled', false).text('Save Changes');
+		updateFloatingSaveButton();
+	}
+
+	// ── Init ───────────────────────────────────────────────────────────────────
+	$(function () {
+		ensureFloatingSaveButton();
+		snapshotOriginals();
+
+		// Track ALL non-autosave, non-hidden field changes within the settings form.
+		$(document).on(
+			'change',
+			'#dwm-settings-form input:not([data-autosave]):not([type="hidden"]), ' +
+			'#dwm-settings-form select:not([data-autosave]), ' +
+			'#dwm-settings-form textarea:not([data-autosave])',
+			function () {
+				const $el = $(this);
+				// Grid checkboxes are handled via their hidden input change listener — skip here.
+				if (GRID_CHECKBOX_CLASSES.some(c => $el.hasClass(c))) return;
+
+				const section = this.closest('.dwm-section');
+				if (!section) return;
+
+				const fieldKey = getFieldKey($el);
+				if (!fieldKey) return;
+
+				const $group   = $el.closest('.dwm-form-group');
+				const reverted = isReverted($el);
+
+				if (reverted) {
+					dirtyFields.delete(fieldKey);
+					$group.removeClass('dwm-dirty');
+					if (!$(section).find('.dwm-form-group.dwm-dirty').length) {
+						dirtySections.delete(section);
+						$(section).removeClass('dwm-dirty');
+					}
+				} else {
+					dirtyFields.add(fieldKey);
+					dirtySections.add(section);
+					$group.addClass('dwm-dirty').removeClass('dwm-save-error dwm-save-warning dwm-save-animating');
+					$(section).addClass('dwm-dirty').removeClass('dwm-save-error dwm-save-warning dwm-save-animating');
+				}
+
+				updateFloatingSaveButton();
+			}
+		);
+
+		// Hidden grid inputs — dirty/revert detection for all checkbox-grid and list-based settings.
+		// Triggered by their respective updater functions after each change (including Select All / Deselect All).
+		$(document).on(
+			'change',
+			'#dwm-hidden-widgets-value, #dwm-hidden-third-party-widgets-value, ' +
+			'#dwm-access-allowed-roles-value, #dwm-excluded-tables-value, #dwm-restricted-user-ids-value',
+			function () {
+				const $input  = $(this);
+				const match   = ($input.attr('name') || '').match(/settings\[([^\]]+)\]/);
+				if (!match) return;
+				const fieldKey = match[1];
+				const section  = $input.closest('.dwm-section')[0];
+				if (!section) return;
+
+				const $group   = $input.closest('.dwm-form-group');
+				const original = fieldOriginals.get(fieldKey);
+				const current  = $input.val() ?? '';
+				const reverted = (original !== undefined && current === original);
+
+				if (reverted) {
+					dirtyFields.delete(fieldKey);
+					$group.removeClass('dwm-dirty');
+					if (!$(section).find('.dwm-form-group.dwm-dirty').length) {
+						dirtySections.delete(section);
+						$(section).removeClass('dwm-dirty');
+					}
+				} else {
+					dirtyFields.add(fieldKey);
+					dirtySections.add(section);
+					$group.addClass('dwm-dirty').removeClass('dwm-save-error dwm-save-warning dwm-save-animating');
+					$(section).addClass('dwm-dirty').removeClass('dwm-save-error dwm-save-warning dwm-save-animating');
+				}
+
+				updateFloatingSaveButton();
+			}
+		);
+
+		// Replay icon — click shows stored toast again.
+		$(document).on('click', '.dwm-field-status-icon', function () {
+			const message = $(this).data('replay-message');
+			const type    = $(this).data('replay-type');
+			if (!message || !window.DWMToast) return;
+			type === 'error' ? window.DWMToast.error(message) : window.DWMToast.warning(message);
+		});
+
+		// ── Floating save click ───────────────────────────────────────────────
+		$(document).on('click', '#dwm-floating-save', function (e) {
+			e.preventDefault();
+			if (isSaving || !dirtyFields.size) return;
+
+			isSaving = true;
+			$(this).prop('disabled', true).text('Saving...');
+
+			if (window.tinymce && typeof window.tinymce.triggerSave === 'function') {
+				window.tinymce.triggerSave();
+			}
+
+			const sectionsWithBtn    = [...dirtySections].filter(s => getSectionSubmitBtn(s).length > 0);
+			const sectionsWithoutBtn = [...dirtySections].filter(s => getSectionSubmitBtn(s).length === 0);
+
+			setSavingState([...dirtySections]);
+
+			// Sections WITH buttons — trigger section-scoped save (settings page).
+			sectionsWithBtn.forEach(s => getSectionSubmitBtn(s).trigger('click'));
+
+			// Sections WITHOUT buttons — one batch AJAX (branding page).
+			if (sectionsWithoutBtn.length > 0) {
+				const settings = {};
+				sectionsWithoutBtn.forEach(s => Object.assign(settings, collectSectionSettings(s)));
+
+				ajax(
+					'dwm_save_settings',
+					{ settings },
+					function (data) {
+						if (data && data.warning) {
+							window.DWMToast && window.DWMToast.warning(data.warning, {
+								onClose: function () {
+									stopAnimation(sectionsWithoutBtn);
+									if (!sectionsWithBtn.length) { isSaving = false; updateFloatingSaveButton(); }
+								}
+							});
+							setWarningState(sectionsWithoutBtn, data.warning);
+						} else {
+							window.DWMToast && window.DWMToast.success('Settings saved.', {
+								onClose: function () {
+									setSuccessState(sectionsWithoutBtn);
+									sectionsWithoutBtn.forEach(s => dirtySections.delete(s));
+									if (!sectionsWithBtn.length) finishSaving();
+									else { isSaving = false; updateFloatingSaveButton(); }
+								}
+							});
+						}
+					},
+					function (data) {
+						const message = (data && data.message) || 'Failed to save settings.';
+						window.DWMToast && window.DWMToast.error(message, {
+							onClose: function () {
+								stopAnimation(sectionsWithoutBtn);
+								if (!sectionsWithBtn.length) { isSaving = false; updateFloatingSaveButton(); }
+							}
+						});
+						setErrorState(sectionsWithoutBtn, message);
+					}
+				);
+			}
+		});
+
+		// Expose state API for handlers outside this IIFE (section-scoped form submit).
+		_dwmState = { setSavingState, setSuccessState, setErrorState, setWarningState, stopAnimation, finishSaving, dirtyFields, dirtySections, updateFloatingSaveButton };
+	});
+})(jQuery);
 
 	// Track which submit button was clicked so we can scope the save.
 	$(document).on('click', '#dwm-settings-form [type="submit"]', function() {
@@ -72,6 +431,7 @@ function initSettingsForm() {
 		const $form     = $(this);
 		const $btn      = $activeSubmitBtn || $form.find('[type="submit"]').first();
 		const $section  = $btn.closest('.dwm-section');
+		const sectionEl = $section[0];
 		const settings  = {};
 
 		$section.find('input, select, textarea').not('[data-autosave]').each(function() {
@@ -87,6 +447,7 @@ function initSettingsForm() {
 			}
 		});
 
+		if (_dwmState) _dwmState.setSavingState([sectionEl]);
 		showLoading($btn);
 
 		const sectionTitle = $section.find('.dwm-section-header h3, .dwm-section-title').first().text().trim() || 'Settings';
@@ -96,14 +457,37 @@ function initSettingsForm() {
 			{ settings },
 			function(data) {
 				hideLoading($btn);
-				DWMToast.success(sectionTitle + ' saved.', { title: sectionTitle });
-				if (data.warning) {
-					DWMToast.warning(data.warning);
+				if (data && data.warning) {
+					DWMToast.warning(data.warning, {
+						title: sectionTitle,
+						onClose: function() { if (_dwmState) _dwmState.stopAnimation([sectionEl]); }
+					});
+					if (_dwmState) _dwmState.setWarningState([sectionEl], data.warning);
+				} else {
+					DWMToast.success(sectionTitle + ' saved.', {
+						title: sectionTitle,
+						onClose: function() {
+							if (_dwmState) {
+								_dwmState.setSuccessState([sectionEl]);
+								_dwmState.dirtySections.delete(sectionEl);
+								$section.find('input:not([type="hidden"]):not([data-autosave]), select:not([data-autosave]), textarea:not([data-autosave])').each(function() {
+									const m = ($(this).attr('name') || '').match(/settings\[([^\]]+)\]/);
+									if (m) _dwmState.dirtyFields.delete(m[1]);
+								});
+								_dwmState.updateFloatingSaveButton();
+							}
+						}
+					});
 				}
 			},
 			function(data) {
 				hideLoading($btn);
-				DWMToast.error(data.message || 'Failed to save ' + sectionTitle + '.', { title: sectionTitle });
+				const message = data.message || 'Failed to save ' + sectionTitle + '.';
+				DWMToast.error(message, {
+					title: sectionTitle,
+					onClose: function() { if (_dwmState) _dwmState.stopAnimation([sectionEl]); }
+				});
+				if (_dwmState) _dwmState.setErrorState([sectionEl], message);
 			}
 		);
 	});
@@ -150,6 +534,7 @@ function initSettingsForm() {
 			});
 			$('#dwm-excluded-tables-value').val(tables.join('\n'));
 		}
+		$('#dwm-excluded-tables-value').trigger('change');
 	}
 
 	$(document).on('change', '.dwm-table-checkbox', updateExcludedTablesValue);
@@ -171,14 +556,14 @@ function initSettingsForm() {
 		const $checked = $('.dwm-access-role-checkbox:checked');
 		if ($checked.length === 0) {
 			$('#dwm-access-allowed-roles-value').val('');
-			return;
+		} else {
+			const roles = [];
+			$checked.each(function() {
+				roles.push($(this).val());
+			});
+			$('#dwm-access-allowed-roles-value').val(roles.join('\n'));
 		}
-
-		const roles = [];
-		$checked.each(function() {
-			roles.push($(this).val());
-		});
-		$('#dwm-access-allowed-roles-value').val(roles.join('\n'));
+		$('#dwm-access-allowed-roles-value').trigger('change');
 	}
 
 	$(document).on('change', '.dwm-access-role-checkbox', updateAllowedRolesValue);
@@ -207,6 +592,7 @@ function initSettingsForm() {
 			});
 			$('#dwm-hidden-widgets-value').val(ids.join('\n'));
 		}
+		$('#dwm-hidden-widgets-value').trigger('change');
 	}
 
 	$(document).on('change', '.dwm-widget-hide-checkbox', updateHiddenWidgetsValue);
@@ -235,6 +621,7 @@ function initSettingsForm() {
 			});
 			$('#dwm-hidden-third-party-widgets-value').val(ids.join('\n'));
 		}
+		$('#dwm-hidden-third-party-widgets-value').trigger('change');
 	}
 
 	$(document).on('change', '.dwm-third-party-widget-hide-checkbox', updateHiddenThirdPartyWidgetsValue);
@@ -273,6 +660,7 @@ function initSettingsForm() {
 	function syncRestrictedUserIdsValue() {
 		const ids = getRestrictedUserIds();
 		$('#dwm-restricted-user-ids-value').val(ids.join('\n'));
+		$('#dwm-restricted-user-ids-value').trigger('change');
 	}
 
 	function updateRestrictedUsersEmptyState() {
@@ -437,10 +825,36 @@ function initSettingsForm() {
 	});
 
 	// Media picker for dashboard logo URL input.
+	function heroLogoModeHasLogo() {
+		const mode = $('#dwm-dashboard-hero-logo-mode').val() || 'disabled';
+		return mode === 'hero_logo' || mode === 'logo_only';
+	}
+
+	function heroLogoModeHasHero() {
+		const mode = $('#dwm-dashboard-hero-logo-mode').val() || 'disabled';
+		return mode === 'hero_logo' || mode === 'hero_only';
+	}
+
+	function syncLogoControlsVisibility() {
+		const mode = $('#dwm-dashboard-hero-logo-mode').val() || 'disabled';
+		const hasLogo = heroLogoModeHasLogo();
+		const hasHero = heroLogoModeHasHero();
+		const isDisabled = mode === 'disabled';
+		const isHeroOnly = mode === 'hero_only';
+		$('#dwm-dashboard-logo-enabled').val(hasLogo ? '1' : '0');
+		$('#dwm-dashboard-logo-controls').toggleClass('dwm-hidden-by-toggle', !hasLogo);
+		$('#dwm-hero-theme-row').toggleClass('dwm-hidden-by-toggle', isDisabled);
+		$('#dwm-hero-dimensions-group').toggleClass('dwm-hidden-by-toggle', !hasHero);
+		$('#dwm-alignment-row-label').text(isHeroOnly ? 'Text Alignment' : 'Logo Alignment');
+		$('#dwm-hero-title-row').toggleClass('dwm-hidden-by-toggle', !hasHero);
+		$('#dwm-hero-message-row').toggleClass('dwm-hidden-by-toggle', !hasHero);
+		$('#dwm-hero-logo-style-row').toggleClass('dwm-hidden-by-toggle', isDisabled);
+		$('#dwm-style-target-label').text(mode === 'logo_only' ? 'Logo Style' : 'Hero Style');
+	}
+
 	function hasDashboardLogoConfigured() {
 		const hasUrl = String($('#dwm-dashboard-logo-url').val() || '').trim().length > 0;
-		const isEnabled = $('#dwm-dashboard-logo-enabled').is(':checked');
-		return hasUrl && isEnabled;
+		return hasUrl && heroLogoModeHasLogo();
 	}
 
 	function openModal(selector) {
@@ -463,32 +877,12 @@ function initSettingsForm() {
 		$('body').removeClass('dwm-modal-open');
 	}
 
-	function syncHeroThemeOptionsByLogo() {
-		const hasLogo = hasDashboardLogoConfigured();
-		const $select = $('#dwm-dashboard-hero-theme');
-		if (!$select.length) return;
-
-		$select.find('option').each(function() {
-			const type = ($(this).attr('data-theme-type') || 'text').toLowerCase();
-			const visible = hasLogo ? true : type !== 'logo';
-			$(this).prop('disabled', !visible).toggle(visible);
-		});
-
-		const $selected = $select.find('option:selected');
-		if (!$selected.length || $selected.prop('disabled')) {
-			const fallback = hasLogo ? 'logo-left' : 'text-left';
-			const $fallback = $select.find('option[value="' + fallback + '"]');
-			$select.val($fallback.length ? fallback : $select.find('option:not(:disabled)').first().val());
-		}
-	}
-
 	function syncLogoLinkOptionsVisibility() {
 		const hasLogo = String($('#dwm-dashboard-logo-url').val() || '').trim().length > 0;
 		$('#dwm-dashboard-logo-link-options').toggleClass('dwm-hidden-by-toggle', !hasLogo);
 		$('#dwm-dashboard-logo-size-controls').toggleClass('dwm-hidden-by-toggle', !hasLogo);
 		$('#dwm-dashboard-logo-style-col').toggleClass('dwm-hidden-by-toggle', !hasLogo);
 		$('#dwm-dashboard-logo-preview-col').toggleClass('dwm-hidden-by-toggle', !hasLogo);
-		syncHeroThemeOptionsByLogo();
 	}
 
 	function syncLogoChooseButtonState() {
@@ -502,9 +896,9 @@ function initSettingsForm() {
 		$('#dwm-dashboard-logo-preview').attr('src', '').addClass('is-empty');
 		$('#dwm-dashboard-logo-link-url').val('');
 		$('#dwm-dashboard-logo-link-new-tab').prop('checked', false);
+		$('#dwm-dashboard-logo-enabled').val('0');
 		syncLogoLinkOptionsVisibility();
 		syncLogoChooseButtonState();
-		syncHeroThemeOptionsByLogo();
 	}
 
 	function syncLogoAlignmentButtons() {
@@ -550,19 +944,60 @@ function initSettingsForm() {
 		syncLogoAlignmentButtons();
 	});
 
-	function getLogoHeightRange(unit) {
-		if (unit === '%' || unit === 'vh') return { min: 1, max: 100 };
-		if (unit === 'rem' || unit === 'em') return { min: 1, max: 30 };
-		return { min: 1, max: 320 }; // px default
+	/**
+	 * Get the allowed range for a given CSS unit.
+	 * Prevents values >100 for %, >100 for vh/vw, and caps rem/em at 30.
+	 */
+	function getRangeForUnit(unit, opts) {
+		opts = opts || {};
+		const allowNeg = opts.allowNeg || false;
+		if (unit === '%' || unit === 'vh' || unit === 'vw') return { min: allowNeg ? -100 : 0, max: 100 };
+		if (unit === 'rem' || unit === 'em') return { min: allowNeg ? -30 : 0, max: 30 };
+		return { min: allowNeg ? -500 : 0, max: 500 }; // px default
+	}
+
+	/**
+	 * Sync min/max on all number inputs within a linked group when its unit select changes.
+	 */
+	function syncLinkedGroupRange($group, allowNeg) {
+		const $unitSelect = $group.find('.dwm-linked-unit-select');
+		if (!$unitSelect.length) return;
+		const unit = $unitSelect.val() || 'px';
+		const range = getRangeForUnit(unit, { allowNeg: allowNeg });
+		$group.find('input[type="number"]').each(function() {
+			const $input = $(this);
+			$input.attr('min', range.min).attr('max', range.max);
+			// Clamp current value within new range.
+			const val = parseFloat($input.val());
+			if (!isNaN(val)) {
+				if (val > range.max) $input.val(range.max);
+				if (val < range.min) $input.val(range.min);
+			}
+		});
+	}
+
+	/**
+	 * Sync a standalone height input + slider when its unit select changes.
+	 */
+	function syncHeightSliderRange(inputId, sliderId, unitId) {
+		const unit = $(unitId).val() || 'px';
+		const range = getRangeForUnit(unit);
+		range.min = Math.max(range.min, 0);
+		const $input = $(inputId);
+		const $slider = $(sliderId);
+		$input.attr('min', range.min).attr('max', range.max);
+		if ($slider.length) {
+			$slider.attr('min', range.min).attr('max', range.max);
+		}
+		const val = parseFloat($input.val());
+		if (!isNaN(val) && val > range.max) {
+			$input.val(range.max);
+			if ($slider.length) $slider.val(range.max);
+		}
 	}
 
 	function syncLogoHeightSliderRange() {
-		const unit = $('#dwm-dashboard-logo-height-unit').val() || 'px';
-		const range = getLogoHeightRange(unit);
-		const $input = $('#dwm-dashboard-logo-height');
-		const $slider = $('#dwm-dashboard-logo-height-slider');
-		$input.attr('min', range.min).attr('max', range.max);
-		$slider.attr('min', range.min).attr('max', range.max);
+		syncHeightSliderRange('#dwm-dashboard-logo-height', '#dwm-dashboard-logo-height-slider', '#dwm-dashboard-logo-height-unit');
 	}
 
 	function syncLogoBorderControlsVisibility() {
@@ -585,6 +1020,25 @@ function initSettingsForm() {
 
 	$(document).on('change', '#dwm-dashboard-logo-height-unit', function() {
 		syncLogoHeightSliderRange();
+	});
+
+	// Hero min-height unit changes.
+	$(document).on('input change', '#dwm-hero-min-height', function() {
+		$('#dwm-hero-min-height-slider').val($(this).val());
+	});
+	$(document).on('input', '#dwm-hero-min-height-slider', function() {
+		$('#dwm-hero-min-height').val($(this).val());
+	});
+	$(document).on('change', '#dwm-hero-min-height-unit', function() {
+		syncHeightSliderRange('#dwm-hero-min-height', '#dwm-hero-min-height-slider', '#dwm-hero-min-height-unit');
+	});
+
+	// Sync linked group ranges when any unit select changes.
+	$(document).on('change', '.dwm-linked-unit-select', function() {
+		const $group = $(this).closest('.dwm-linked-inputs');
+		const groupName = $group.attr('data-group') || '';
+		const allowNeg = groupName.indexOf('margin') !== -1;
+		syncLinkedGroupRange($group, allowNeg);
 	});
 
 	// Linked padding/margin controls
@@ -625,7 +1079,22 @@ function initSettingsForm() {
 	initLinkedInputGroup('logo-margin');
 	initLinkedInputGroup('logo-border');
 	initLinkedInputGroup('logo-radius');
+	initLinkedInputGroup('hero-padding');
+	initLinkedInputGroup('hero-margin');
+	initLinkedInputGroup('hero-border');
+	initLinkedInputGroup('hero-radius');
 	syncLogoBorderControlsVisibility();
+
+	// Sync all linked group ranges on init.
+	$('.dwm-linked-unit-select').each(function() {
+		const $group = $(this).closest('.dwm-linked-inputs');
+		const groupName = $group.attr('data-group') || '';
+		const allowNeg = groupName.indexOf('margin') !== -1;
+		syncLinkedGroupRange($group, allowNeg);
+	});
+	// Sync height sliders on init.
+	syncLogoHeightSliderRange();
+	syncHeightSliderRange('#dwm-hero-min-height', '#dwm-hero-min-height-slider', '#dwm-hero-min-height-unit');
 
 	$(document).on('change', '#dwm-logo-border-style', function() {
 		syncLogoBorderControlsVisibility();
@@ -678,8 +1147,8 @@ function initSettingsForm() {
 		syncLogoLinkOptionsVisibility();
 		syncLogoChooseButtonState();
 	});
-	$(document).on('change', '#dwm-dashboard-logo-enabled', function() {
-		syncHeroThemeOptionsByLogo();
+	$(document).on('change', '#dwm-dashboard-hero-logo-mode', function() {
+		syncLogoControlsVisibility();
 	});
 
 	function updateGradientControlVisibility(prefix) {
@@ -735,12 +1204,12 @@ function initSettingsForm() {
 	});
 
 	function isPaddingLinked() {
-		return $('#dwm-padding-linked').val() === '1';
+		return $('.dwm-link-value[data-group="dashboard-padding"]').val() === '1';
 	}
 
 	function setPaddingLinked(linked) {
-		$('#dwm-padding-linked').val(linked ? '1' : '0');
-		$('#dwm-padding-link').toggleClass('is-linked', linked);
+		$('.dwm-link-value[data-group="dashboard-padding"]').val(linked ? '1' : '0');
+		$('.dwm-link-btn[data-group="dashboard-padding"]').toggleClass('is-linked', linked);
 	}
 
 	function syncPaddingSide(side, value) {
@@ -748,7 +1217,7 @@ function initSettingsForm() {
 		$('#dwm-padding-' + side + '-slider').val(value);
 	}
 
-	$(document).on('click', '#dwm-padding-link', function(e) {
+	$(document).on('click', '.dwm-link-btn[data-group="dashboard-padding"]', function(e) {
 		e.preventDefault();
 		setPaddingLinked(!isPaddingLinked());
 	});
@@ -777,6 +1246,15 @@ function initSettingsForm() {
 		if (fieldKey === 'dashboard_hero_title') {
 			return {
 				fontSize: '28px',
+				fontFamily: 'inherit',
+				fontWeight: '700',
+				alignment: 'left',
+				color: '#ffffff'
+			};
+		}
+		if (fieldKey === 'dashboard_hero_message') {
+			return {
+				fontSize: '24px',
 				fontFamily: 'inherit',
 				fontWeight: '700',
 				alignment: 'left',
@@ -868,15 +1346,30 @@ function initSettingsForm() {
 	$(document).on('input', '#dwm-title-format-color', function() {
 		$('#dwm-title-color-wheel').val($(this).val());
 	});
+	$(document).on('click', '.dwm-preset-swatch', function(e) {
+		e.preventDefault();
+		var color = $(this).data('color');
+		$('#dwm-title-format-color').val(color);
+		$('#dwm-title-color-wheel').val(color);
+	});
 	$(document).on('input change', '#dwm-title-gradient-type, #dwm-title-gradient-angle, #dwm-title-gradient-start, #dwm-title-gradient-start-pos, #dwm-title-gradient-end, #dwm-title-gradient-end-pos', function() {
 		updateTitleGradientPreview();
 	});
+	function updateRgbaPreview() {
+		var r = parseInt($('#dwm-title-rgba-r').val(), 10) || 0;
+		var g = parseInt($('#dwm-title-rgba-g').val(), 10) || 0;
+		var b = parseInt($('#dwm-title-rgba-b').val(), 10) || 0;
+		var a = (parseInt($('#dwm-title-rgba-a').val(), 10) || 100) / 100;
+		$('#dwm-title-rgba-preview').css('background-color', 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')');
+	}
 	$(document).on('input', '.dwm-rgba-slider', function() {
 		$(this).closest('.dwm-rgba-input-group').find('.dwm-rgba-value').val($(this).val());
+		updateRgbaPreview();
 	});
 	$(document).on('input', '.dwm-rgba-value', function() {
 		const v = $(this).val();
 		$(this).closest('.dwm-rgba-input-group').find('.dwm-rgba-slider').val(v);
+		updateRgbaPreview();
 	});
 	$(document).on('click', '.dwm-alignment-btn', function(e) {
 		e.preventDefault();
@@ -914,7 +1407,8 @@ function initSettingsForm() {
 		if (window.dwmModalAPI && typeof window.dwmModalAPI.close === 'function') {
 			window.dwmModalAPI.close('#dwm-title-format-modal');
 		} else {
-			$('#dwm-title-format-modal').hide();
+			$('#dwm-title-format-modal').removeClass('active');
+			$('body').removeClass('dwm-modal-open');
 		}
 	});
 
@@ -925,11 +1419,11 @@ function initSettingsForm() {
 	updateGradientControlVisibility('dwm-logo');
 	updateGradientPreview('dwm-logo');
 	syncTitleModeVisibility();
+	syncLogoControlsVisibility();
 	syncLogoLinkOptionsVisibility();
 	syncLogoAlignmentButtons();
 	syncLogoChooseButtonState();
 	syncLogoHeightSliderRange();
-	syncHeroThemeOptionsByLogo();
 	setPaddingLinked(isPaddingLinked());
 
 	updateAllowedRolesValue();

@@ -64,12 +64,13 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 		<!-- Access Control -->
 		<div id="dwm-section-access-control" class="dwm-section">
 			<?php
-			$title_raw         = esc_html__( 'Access Control', 'dashboard-widget-manager' ) . ' <span class="dwm-pro-badge">' . esc_html__( 'Pro', 'dashboard-widget-manager' ) . '</span>';
+			$title             = __( 'Access Control', 'dashboard-widget-manager' );
+			$is_pro_only       = true;
 			$help_modal_target = 'dwm-docs-modal';
 			$help_icon_label   = __( 'Learn about DWM access control', 'dashboard-widget-manager' );
 			$attrs             = 'data-docs-page="settings-access-control"';
 			include __DIR__ . '/partials/section-header-with-actions.php';
-			unset( $title_raw, $help_modal_target, $help_icon_label, $attrs, $actions_html );
+			unset( $title, $is_pro_only, $help_modal_target, $help_icon_label, $attrs, $actions_html );
 
 			$all_roles          = wp_roles()->roles;
 			$all_role_keys      = array_keys( $all_roles );
@@ -130,12 +131,13 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 		<!-- Security -->
 		<div id="dwm-section-table-allowlist" class="dwm-section">
 			<?php
-			$title_raw         = esc_html__( 'Table Allow List', 'dashboard-widget-manager' ) . ' <span class="dwm-pro-badge">' . esc_html__( 'Pro', 'dashboard-widget-manager' ) . '</span>';
+			$title             = __( 'Table Allow List', 'dashboard-widget-manager' );
+			$is_pro_only       = true;
 			$help_modal_target = 'dwm-docs-modal';
 			$help_icon_label   = __( 'Learn about the Table Allow List Setting', 'dashboard-widget-manager' );
 			$attrs             = 'data-docs-page="feature-table-allowlist"';
 			include __DIR__ . '/partials/section-header-with-actions.php';
-			unset( $title_raw, $help_modal_target, $help_icon_label, $attrs, $actions_html );
+			unset( $title, $is_pro_only, $help_modal_target, $help_icon_label, $attrs, $actions_html );
 			?>
 
 			<div class="dwm-form-group">
@@ -177,12 +179,13 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 		<!-- Support & Privacy -->
 		<div id="dwm-section-support-privacy" class="dwm-section">
 			<?php
-			$title_raw         = esc_html__( 'Support & Privacy', 'dashboard-widget-manager' ) . ' <span class="dwm-pro-badge">' . esc_html__( 'Pro', 'dashboard-widget-manager' ) . '</span>';
+			$title             = __( 'Support & Privacy', 'dashboard-widget-manager' );
+			$is_pro_only       = true;
 			$help_modal_target = 'dwm-docs-modal';
 			$help_icon_label   = __( 'Learn about support data sharing and legal disclosures', 'dashboard-widget-manager' );
 			$attrs             = 'data-docs-page="category-overview-support"';
 			include __DIR__ . '/partials/section-header-with-actions.php';
-			unset( $title_raw, $help_modal_target, $help_icon_label, $attrs, $actions_html );
+			unset( $title, $is_pro_only, $help_modal_target, $help_icon_label, $attrs, $actions_html );
 
 			$privacy_page_id = (int) get_option( 'tda_shared_privacy_page_id' );
 			$terms_page_id   = (int) get_option( 'tda_shared_terms_page_id' );

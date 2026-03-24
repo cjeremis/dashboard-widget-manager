@@ -482,7 +482,7 @@ class DWM_Sanitizer {
 			$sanitized['excluded_tables'] = implode( "\n", $tables );
 		}
 
-		foreach ( array( 'hide_help_dropdown', 'hide_screen_options', 'dashboard_branding_enabled', 'dashboard_logo_enabled', 'dashboard_logo_link_enabled', 'dashboard_logo_link_new_tab', 'dashboard_background_enabled', 'dashboard_padding_enabled', 'dashboard_padding_linked', 'dashboard_hero_enabled', 'dashboard_notice_enabled', 'dashboard_notice_dismissible' ) as $key ) {
+		foreach ( array( 'hide_help_dropdown', 'hide_screen_options', 'hide_inline_notices', 'dashboard_branding_enabled', 'dashboard_logo_enabled', 'dashboard_logo_link_enabled', 'dashboard_logo_link_new_tab', 'dashboard_background_enabled', 'dashboard_padding_enabled', 'dashboard_padding_linked', 'dashboard_hero_enabled', 'dashboard_notice_enabled', 'dashboard_notice_dismissible' ) as $key ) {
 			if ( array_key_exists( $key, $settings ) ) {
 				$sanitized[ $key ] = absint( $settings[ $key ] ) ? 1 : 0;
 			}
@@ -490,7 +490,7 @@ class DWM_Sanitizer {
 
 		if ( isset( $settings['dashboard_background_type'] ) ) {
 			$type = sanitize_key( (string) $settings['dashboard_background_type'] );
-			$sanitized['dashboard_background_type'] = in_array( $type, array( 'default', 'solid', 'gradient' ), true ) ? $type : 'default';
+			$sanitized['dashboard_background_type'] = in_array( $type, array( 'solid', 'gradient' ), true ) ? $type : 'solid';
 		}
 
 		if ( isset( $settings['dashboard_bg_solid_color'] ) ) {
@@ -742,6 +742,33 @@ class DWM_Sanitizer {
 			$sanitized['dashboard_hero_message'] = wp_kses_post( (string) $settings['dashboard_hero_message'] );
 		}
 
+		if ( isset( $settings['dashboard_hero_message_font_family'] ) ) {
+			$sanitized['dashboard_hero_message_font_family'] = sanitize_text_field( (string) $settings['dashboard_hero_message_font_family'] );
+		}
+
+		if ( isset( $settings['dashboard_hero_message_font_size'] ) ) {
+			$size = sanitize_text_field( (string) $settings['dashboard_hero_message_font_size'] );
+			if ( preg_match( '/^\d+(?:\.\d+)?(px|rem|em)$/', $size ) ) {
+				$sanitized['dashboard_hero_message_font_size'] = $size;
+			} else {
+				$sanitized['dashboard_hero_message_font_size'] = '24px';
+			}
+		}
+
+		if ( isset( $settings['dashboard_hero_message_font_weight'] ) ) {
+			$weight = sanitize_text_field( (string) $settings['dashboard_hero_message_font_weight'] );
+			$sanitized['dashboard_hero_message_font_weight'] = in_array( $weight, array( '300', '400', '500', '600', '700' ), true ) ? $weight : '700';
+		}
+
+		if ( isset( $settings['dashboard_hero_message_alignment'] ) ) {
+			$align = sanitize_key( (string) $settings['dashboard_hero_message_alignment'] );
+			$sanitized['dashboard_hero_message_alignment'] = in_array( $align, array( 'left', 'center', 'right' ), true ) ? $align : 'left';
+		}
+
+		if ( isset( $settings['dashboard_hero_message_color'] ) ) {
+			$sanitized['dashboard_hero_message_color'] = sanitize_text_field( (string) $settings['dashboard_hero_message_color'] );
+		}
+
 		if ( isset( $settings['dashboard_hero_background_type'] ) ) {
 			$type = sanitize_key( (string) $settings['dashboard_hero_background_type'] );
 			$sanitized['dashboard_hero_background_type'] = in_array( $type, array( 'solid', 'gradient' ), true ) ? $type : 'solid';
@@ -855,6 +882,13 @@ class DWM_Sanitizer {
 				$unit = sanitize_key( (string) $settings[ $dim_unit_key ] );
 				$sanitized[ $dim_unit_key ] = in_array( $unit, array( 'px', '%', 'rem', 'em', 'vh' ), true ) ? $unit : 'px';
 			}
+		}
+
+		if ( array_key_exists( 'dashboard_hero_logo_mode', $settings ) ) {
+			$allowed = array( 'disabled', 'logo_only', 'hero_only', 'hero_logo' );
+			$sanitized['dashboard_hero_logo_mode'] = in_array( $settings['dashboard_hero_logo_mode'], $allowed, true )
+				? $settings['dashboard_hero_logo_mode']
+				: 'disabled';
 		}
 
 		if ( isset( $settings['dashboard_notice_type'] ) ) {

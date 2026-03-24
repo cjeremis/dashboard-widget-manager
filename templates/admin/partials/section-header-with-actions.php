@@ -17,11 +17,17 @@ $actions_html      = $actions_html ?? '';
 $title_tag         = $title_tag ?? 'h2';
 $extra_class       = $extra_class ?? '';
 $title_raw         = $title_raw ?? '';
+$is_pro_only       = $is_pro_only ?? false;
 $help_modal_target = $help_modal_target ?? '';
 $help_icon_label   = $help_icon_label ?? __( 'View help', 'dashboard-widget-manager' );
 
+if ( isset( $is_pro_only ) && $is_pro_only ) {
+	$extra_class .= ' dwm-pro-section';
+}
+
 // If a help icon is requested but no actions_html provided, generate the help icon.
 if ( $help_modal_target && empty( $actions_html ) ) {
+	$section_extra_class = $extra_class; // preserve before help-trigger overwrites it
 	ob_start();
 	$text         = '?';
 	$modal_target = $help_modal_target;
@@ -37,18 +43,26 @@ if ( $help_modal_target && empty( $actions_html ) ) {
 	include __DIR__ . '/help-trigger.php';
 	unset( $text, $modal_target, $variant, $icon, $extra_class, $attrs, $help_icon_classes, $help_attrs );
 	$actions_html = ob_get_clean();
+	$extra_class  = $section_extra_class; // restore after help-trigger
+	unset( $section_extra_class );
 }
 ?>
 <div class="dwm-section-header <?php echo esc_attr( $extra_class ?? '' ); ?>">
 	<<?php echo esc_attr( $title_tag ); ?> class="dwm-section-title">
 		<?php
 		if ( $title_raw ) {
-			echo $title_raw; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo '<span>' . $title_raw . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		} else {
-			echo esc_html( $title );
+			echo '<span>' . esc_html( $title ) . '</span>';
 		}
 		?>
+		<?php 
+			if ( isset( $is_pro_only ) && $is_pro_only ) {
+				echo '<span class="dwm-pro-badge">' . esc_html__( 'Pro', 'dashboard-widget-manager' ) . '</span>';
+			}
+		?>
 	</<?php echo esc_attr( $title_tag ); ?>>
+
 	<?php if ( $actions_html ) : ?>
 		<?php echo $actions_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 	<?php endif; ?>

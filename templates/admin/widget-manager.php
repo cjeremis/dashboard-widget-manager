@@ -126,7 +126,7 @@ include __DIR__ . '/partials/page-wrapper-start.php';
 					<?php endif; ?>
 				</span>
 				<?php endif; ?>
-				<a href="#" class="dwm-button dwm-button-primary dwm-create-widget"><span class="dashicons dashicons-plus-alt2"></span><?php esc_html_e( 'Create New Widget', 'dashboard-widget-manager' ); ?></a>
+				<a href="#" class="dwm-button dwm-button-primary dwm-create-widget"><span class="dashicons dashicons-plus-alt2"></span><?php esc_html_e( 'New Widget', 'dashboard-widget-manager' ); ?></a>
 			</div>
 
 			<?php if ( ! empty( $widgets ) ) : ?>

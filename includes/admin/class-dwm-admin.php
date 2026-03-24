@@ -49,6 +49,20 @@ class DWM_Admin {
 		$logo_url = DWM_PLUGIN_URL . 'assets/images/logo.png';
 		wp_add_inline_style( 'dwm-admin', ':root { --dwm-logo-url: url("' . esc_url( $logo_url ) . '"); }' );
 
+		// WP Dashboard (index.php) — static styles for FAB, picker, hero, toasts, etc.
+		if ( 'index.php' === $hook ) {
+			$ver = file_exists( DWM_PLUGIN_DIR . 'assets/minimized/css/wp-dashboard.min.css' )
+				? (string) filemtime( DWM_PLUGIN_DIR . 'assets/minimized/css/wp-dashboard.min.css' )
+				: DWM_VERSION;
+			wp_enqueue_style(
+				'dwm-wp-dashboard',
+				DWM_PLUGIN_URL . 'assets/minimized/css/wp-dashboard.min.css',
+				array( 'dwm-admin' ),
+				$ver,
+				'all'
+			);
+		}
+
 		// Page-specific styles.
 		if ( strpos( $hook, 'dashboard-widget-manager' ) !== false && strpos( $hook, 'dwm-' ) === false ) {
 			$ver = file_exists( DWM_PLUGIN_DIR . 'assets/minimized/css/dashboard.min.css' )
@@ -131,478 +145,14 @@ class DWM_Admin {
 		$settings = $data->get_settings();
 
 		$create_url   = esc_url( admin_url( 'admin.php?page=dashboard-widget-manager&action=create' ) );
-		$button_label = esc_js( __( 'New Widget', 'dashboard-widget-manager' ) );
 
-		// Detect whether any dashboard customisation is live on the dashboard page.
-		$title_mode_check = sanitize_key( (string) ( $settings['dashboard_title_mode'] ?? 'default' ) );
-		$title_hidden     = 'hide' === $title_mode_check;
-		$customization_active = ( ! empty( $settings['dashboard_branding_enabled'] )
-			|| ! empty( $settings['dashboard_background_enabled'] )
-			|| ! empty( $settings['dashboard_hero_enabled'] ) )
-			&& ! $title_hidden;
+		// Always show floating action button at bottom-right of dashboard.
+		$logo_url_fab  = esc_url( DWM_PLUGIN_URL . 'assets/images/logo.png' );
+		$branding_url  = esc_url( admin_url( 'admin.php?page=dwm-customize-dashboard' ) );
+		$has_existing  = ! empty( $widgets );
+		$manage_url    = esc_url( admin_url( 'admin.php?page=dashboard-widget-manager' ) );
 
-		wp_add_inline_style( 'wp-admin', '
-			[id^="dwm_widget_"] .inside {
-				padding: 0;
-				margin: 6px;
-			}
-			.dwm-dashboard-new-widget-btn {
-				display: inline-flex;
-				align-items: center;
-				gap: 4px;
-				padding: 6px 14px;
-				font-size: 13px;
-				font-weight: 500;
-				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-				color: #ffffff !important;
-				border: none;
-				border-radius: 4px;
-				cursor: pointer;
-				text-decoration: none;
-				vertical-align: middle;
-				margin-left: 8px;
-				line-height: 1.4;
-				transition: box-shadow 0.2s ease, transform 0.15s ease;
-			}
-			.dwm-dashboard-new-widget-btn:hover {
-				color: #ffffff !important;
-				box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-				transform: translateY(-1px);
-			}
-			.dwm-dashboard-new-widget-btn .dashicons {
-				font-size: 16px;
-				width: 16px;
-				height: 16px;
-				line-height: 1;
-			}
-			/* Widget Picker Modal */
-			#dwm-widget-picker-modal {
-				display: none;
-				position: fixed;
-				inset: 0;
-				z-index: 999999;
-				align-items: center;
-				justify-content: center;
-			}
-			#dwm-widget-picker-modal.active { display: flex; }
-			#dwm-widget-picker-modal .dwm-picker-overlay {
-				position: absolute;
-				inset: 0;
-				background: rgba(0,0,0,0.7);
-				backdrop-filter: blur(4px);
-			}
-			#dwm-widget-picker-modal .dwm-picker-content {
-				position: relative;
-				background: #ffffff;
-				border-radius: 16px;
-				box-shadow: 0 25px 50px rgba(0,0,0,0.25);
-				z-index: 10;
-				width: 90%;
-				max-width: 500px;
-				max-height: 85vh;
-				display: flex;
-				flex-direction: column;
-				overflow: hidden;
-				animation: dwmPickerSlideIn 0.3s ease-out;
-			}
-			@keyframes dwmPickerSlideIn {
-				from { opacity: 0; transform: translateY(-20px) scale(0.97); }
-				to   { opacity: 1; transform: translateY(0) scale(1); }
-			}
-			#dwm-widget-picker-modal .dwm-picker-header {
-				padding: 16px 24px;
-				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				flex-shrink: 0;
-			}
-			#dwm-widget-picker-modal .dwm-picker-header h2 {
-				color: #fff;
-				font-size: 17px;
-				font-weight: 700;
-				margin: 0;
-				display: flex;
-				align-items: center;
-				gap: 8px;
-				line-height: 1.3;
-			}
-			#dwm-widget-picker-modal .dwm-picker-header .dashicons {
-				font-size: 20px;
-				width: 20px;
-				height: 20px;
-			}
-			#dwm-picker-close {
-				background: transparent;
-				border: none;
-				color: rgba(255,255,255,0.8);
-				font-size: 24px;
-				line-height: 1;
-				cursor: pointer;
-				padding: 4px;
-				border-radius: 6px;
-				transition: all 0.2s;
-			}
-			#dwm-picker-close:hover {
-				color: #fff;
-				background: rgba(255,255,255,0.15);
-				transform: rotate(90deg);
-			}
-			#dwm-widget-picker-modal .dwm-picker-body {
-				padding: 24px;
-				overflow-y: auto;
-				flex: 1;
-			}
-			.dwm-picker-step { display: none; }
-			.dwm-picker-step.active { display: block; }
-			.dwm-picker-choices {
-				display: grid;
-				grid-template-columns: 1fr 1fr;
-				gap: 12px;
-			}
-			.dwm-picker-choice {
-				display: flex;
-				flex-direction: column;
-				align-items: center;
-				gap: 10px;
-				padding: 20px 16px;
-				border: 2px solid #e5e7eb;
-				border-radius: 12px;
-				background: #fff;
-				cursor: pointer;
-				text-align: center;
-				transition: all 0.2s;
-				text-decoration: none;
-				color: #1f2937;
-			}
-			.dwm-picker-choice:hover {
-				border-color: #667eea;
-				background: #f5f3ff;
-				color: #1f2937;
-				box-shadow: 0 4px 12px rgba(102,126,234,0.15);
-				transform: translateY(-2px);
-			}
-			.dwm-picker-choice .dashicons {
-				font-size: 28px;
-				width: 28px;
-				height: 28px;
-				color: #667eea;
-			}
-			.dwm-picker-choice strong {
-				font-size: 14px;
-				font-weight: 600;
-				display: block;
-			}
-			.dwm-picker-choice span:not(.dashicons) {
-				font-size: 12px;
-				color: #6b7280;
-				display: block;
-				line-height: 1.4;
-			}
-			.dwm-picker-back {
-				background: none;
-				border: none;
-				color: #6b7280;
-				font-size: 13px;
-				cursor: pointer;
-				padding: 0;
-				margin-bottom: 16px;
-				display: flex;
-				align-items: center;
-				gap: 4px;
-			}
-			.dwm-picker-back:hover { color: #374151; }
-			.dwm-widget-list {
-				display: flex;
-				flex-direction: column;
-				gap: 8px;
-				margin-top: 4px;
-			}
-			.dwm-widget-list-item {
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				padding: 10px 14px;
-				border: 1px solid #e5e7eb;
-				border-radius: 8px;
-				cursor: pointer;
-				background: #fff;
-				transition: all 0.15s;
-				width: 100%;
-				text-align: left;
-			}
-			.dwm-widget-list-item:hover {
-				border-color: #667eea;
-				background: #f9f8ff;
-				box-shadow: 0 2px 6px rgba(102,126,234,0.12);
-			}
-			.dwm-widget-list-item .dwm-widget-item-name {
-				font-size: 13px;
-				font-weight: 500;
-				color: #1f2937;
-			}
-			.dwm-widget-list-item .dwm-widget-item-desc {
-				font-size: 11px;
-				color: #9ca3af;
-				margin-top: 2px;
-			}
-			.dwm-widget-status-badge {
-				font-size: 11px;
-				font-weight: 500;
-				padding: 2px 8px;
-				border-radius: 20px;
-				flex-shrink: 0;
-				margin-left: 8px;
-			}
-			.dwm-widget-status-badge.active {
-				background: #d1fae5;
-				color: #065f46;
-			}
-			.dwm-widget-status-badge.draft {
-				background: #fef3c7;
-				color: #92400e;
-			}
-			.dwm-picker-filters {
-				display: flex;
-				flex-direction: column;
-				gap: 10px;
-				margin-bottom: 12px;
-			}
-			.dwm-picker-status-filters {
-				display: flex;
-				align-items: center;
-				gap: 4px;
-				flex-wrap: wrap;
-			}
-			.dwm-picker-filter-btn {
-				background: none;
-				border: none;
-				font-size: 12px;
-				color: #6b7280;
-				cursor: pointer;
-				padding: 2px 4px;
-				border-radius: 3px;
-				transition: color 0.15s;
-				line-height: 1.4;
-			}
-			.dwm-picker-filter-btn:hover { color: #374151; }
-			.dwm-picker-filter-btn.is-active {
-				color: #1f2937;
-				font-weight: 600;
-			}
-			.dwm-picker-filter-sep {
-				color: #d1d5db;
-				font-size: 12px;
-				user-select: none;
-			}
-			.dwm-picker-filter-count {
-				display: inline-block;
-				background: #e5e7eb;
-				color: #374151;
-				font-size: 10px;
-				font-weight: 600;
-				padding: 1px 5px;
-				border-radius: 10px;
-				margin-right: 2px;
-			}
-			.dwm-picker-filter-btn.is-active .dwm-picker-filter-count {
-				background: #667eea;
-				color: #fff;
-			}
-			.dwm-picker-search-input {
-				width: 100%;
-				padding: 7px 10px;
-				border: 1px solid #d1d5db;
-				border-radius: 6px;
-				font-size: 13px;
-				color: #374151;
-				background: #f9fafb;
-				box-sizing: border-box;
-				transition: border-color 0.15s, box-shadow 0.15s;
-			}
-			.dwm-picker-search-input:focus {
-				outline: none;
-				border-color: #667eea;
-				background: #fff;
-				box-shadow: 0 0 0 2px rgba(102,126,234,0.15);
-			}
-			.dwm-picker-no-results {
-				color: #9ca3af;
-				font-size: 13px;
-				text-align: center;
-				padding: 16px 0;
-				margin: 0;
-			}
-			.dwm-picker-confirm-text {
-				font-size: 14px;
-				color: #374151;
-				margin-bottom: 20px;
-				line-height: 1.5;
-			}
-			.dwm-picker-confirm-text strong { color: #1f2937; }
-			.dwm-picker-footer {
-				display: flex;
-				justify-content: flex-end;
-				gap: 8px;
-				margin-top: 20px;
-			}
-			.dwm-picker-btn {
-				padding: 8px 18px;
-				font-size: 13px;
-				font-weight: 500;
-				border-radius: 6px;
-				border: none;
-				cursor: pointer;
-				transition: all 0.15s;
-			}
-			.dwm-picker-btn-primary {
-				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-				color: #fff;
-			}
-			.dwm-picker-btn-primary:hover {
-				box-shadow: 0 4px 10px rgba(102,126,234,0.4);
-				transform: translateY(-1px);
-				color: #fff;
-			}
-			.dwm-picker-btn-secondary {
-				background: #f3f4f6;
-				color: #374151;
-				border: 1px solid #d1d5db;
-			}
-			.dwm-picker-btn-secondary:hover { background: #e5e7eb; }
-		' );
-
-		if ( $customization_active ) {
-			// Branding is live — show floating action button at bottom-right of dashboard.
-			$logo_url_fab  = esc_url( DWM_PLUGIN_URL . 'assets/images/logo.png' );
-			$branding_url  = esc_url( admin_url( 'admin.php?page=dwm-customize-dashboard' ) );
-			$has_existing  = ! empty( $widgets );
-			$manage_url    = esc_url( admin_url( 'admin.php?page=dashboard-widget-manager' ) );
-
-			wp_add_inline_style(
-				'wp-admin',
-				'
-				/* ── DWM Floating Action Button ── */
-				#dwm-fab {
-					position: fixed;
-					bottom: 32px;
-					right: 32px;
-					z-index: 99999;
-					display: flex;
-					flex-direction: row-reverse;
-					align-items: center;
-				}
-				#dwm-fab-icon {
-					width: 48px;
-					height: 48px;
-					border-radius: 50%;
-					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-					border: none;
-					cursor: pointer;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					box-shadow: 0 4px 16px rgba(102, 126, 234, 0.45);
-					transition: box-shadow 0.25s ease, transform 0.25s ease;
-					flex-shrink: 0;
-					position: relative;
-					z-index: 2;
-					padding: 0;
-				}
-				#dwm-fab-icon:hover {
-					box-shadow: 0 6px 24px rgba(102, 126, 234, 0.6);
-					transform: scale(1.06);
-				}
-				#dwm-fab-icon img {
-					width: 28px;
-					height: 28px;
-					border-radius: 50%;
-					object-fit: contain;
-					pointer-events: none;
-				}
-				/* Panel slides out to the LEFT of the icon */
-				#dwm-fab-panel {
-					position: absolute;
-					right: 40px;
-					bottom: 0;
-					background: #fff;
-					border-radius: 14px;
-					box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
-					min-width: 240px;
-					opacity: 0;
-					transform: translateX(20px);
-					pointer-events: none;
-					transition: opacity 0.22s ease, transform 0.22s ease;
-					overflow: hidden;
-					z-index: 1;
-				}
-				#dwm-fab.is-open #dwm-fab-panel {
-					opacity: 1;
-					transform: translateX(0);
-					pointer-events: auto;
-				}
-				#dwm-fab-panel-header {
-					display: flex;
-					align-items: center;
-					gap: 10px;
-					padding: 14px 18px 10px;
-					border-bottom: 1px solid #f1f5f9;
-				}
-				#dwm-fab-panel-header img {
-					width: 24px;
-					height: 24px;
-					border-radius: 50%;
-					object-fit: contain;
-					flex-shrink: 0;
-				}
-				#dwm-fab-panel-header span {
-					font-size: 13px;
-					font-weight: 700;
-					color: #1f2937;
-					white-space: nowrap;
-				}
-				#dwm-fab-panel-menu {
-					list-style: none;
-					margin: 0;
-					padding: 8px 0;
-				}
-				#dwm-fab-panel-menu li a {
-					display: flex;
-					align-items: center;
-					gap: 10px;
-					padding: 9px 18px;
-					font-size: 13px;
-					font-weight: 500;
-					color: #374151;
-					text-decoration: none;
-					transition: background 0.12s ease, color 0.12s ease;
-				}
-				#dwm-fab-panel-menu li a:hover {
-					background: #f5f3ff;
-					color: #667eea;
-				}
-				#dwm-fab-panel-menu li a .dashicons {
-					font-size: 18px;
-					width: 18px;
-					height: 18px;
-					color: #667eea;
-					flex-shrink: 0;
-				}
-				/* Nudge animation on load */
-				@keyframes dwmFabNudge {
-					0%   { transform: translateX(0); }
-					30%  { transform: translateX(-8px); }
-					50%  { transform: translateX(3px); }
-					70%  { transform: translateX(-2px); }
-					100% { transform: translateX(0); }
-				}
-				#dwm-fab.dwm-fab-nudge #dwm-fab-icon {
-					animation: dwmFabNudge 0.6s ease-out;
-				}
-			'
-			);
-
-			add_action(
+		add_action(
 				'admin_footer',
 				function () use ( $logo_url_fab, $create_url, $branding_url, $has_existing, $manage_url ) {
 					?>
@@ -617,23 +167,27 @@ class DWM_Admin {
 							</div>
 							<ul id="dwm-fab-panel-menu">
 								<li>
-									<a href="<?php echo $create_url; ?>">
+									<div class="fab-panel-menu-item" id="dwm-fab-add-widget">
 										<span class="dashicons dashicons-plus-alt2"></span>
-										<?php esc_html_e( 'Create New', 'dashboard-widget-manager' ); ?>
-									</a>
+										<?php esc_html_e( 'Add Widget', 'dashboard-widget-manager' ); ?>
+									</div>
 								</li>
 								<?php if ( $has_existing ) : ?>
 								<li>
 									<a href="<?php echo $manage_url; ?>">
-										<span class="dashicons dashicons-list-view"></span>
-										<?php esc_html_e( 'Manage Widgets', 'dashboard-widget-manager' ); ?>
+										<div class="fab-panel-menu-item">
+											<span class="dashicons dashicons-list-view"></span>
+											<?php esc_html_e( 'Manage Widgets', 'dashboard-widget-manager' ); ?>
+										</div>
 									</a>
 								</li>
 								<?php endif; ?>
 								<li>
 									<a href="<?php echo $branding_url; ?>">
-										<span class="dashicons dashicons-art"></span>
-										<?php esc_html_e( 'Branding', 'dashboard-widget-manager' ); ?>
+										<div class="fab-panel-menu-item">
+											<span class="dashicons dashicons-art"></span>
+											<?php esc_html_e( 'Branding', 'dashboard-widget-manager' ); ?>
+										</div>
 									</a>
 								</li>
 							</ul>
@@ -644,28 +198,31 @@ class DWM_Admin {
 						var fab = document.getElementById('dwm-fab');
 						if (!fab) return;
 						var icon = document.getElementById('dwm-fab-icon');
-						var openTimeout, closeTimeout;
 
-						function openPanel() {
-							clearTimeout(closeTimeout);
-							fab.classList.add('is-open');
-						}
-						function closePanel() {
-							closeTimeout = setTimeout(function() {
-								fab.classList.remove('is-open');
-							}, 200);
-						}
+						icon.addEventListener('click', function(e) {
+							e.stopPropagation();
+							fab.classList.toggle('is-open');
+						});
 
-						fab.addEventListener('mouseenter', openPanel);
-						fab.addEventListener('mouseleave', closePanel);
-						icon.addEventListener('click', function() {
-							if (fab.classList.contains('is-open')) {
+						document.addEventListener('click', function(e) {
+							if (fab.classList.contains('is-open') && !fab.contains(e.target)) {
 								fab.classList.remove('is-open');
-							} else {
-								openPanel();
 							}
 						});
 
+						// "Add Widget" opens the picker modal, or navigates to create page if no widgets exist.
+						var addBtn = document.getElementById('dwm-fab-add-widget');
+						if (addBtn) {
+							addBtn.addEventListener('click', function() {
+								fab.classList.remove('is-open');
+								var pickerBtn = document.getElementById('dwm-open-widget-picker');
+								if (pickerBtn) {
+									pickerBtn.click();
+								} else {
+									window.location.href = '<?php echo $create_url; ?>';
+								}
+							});
+						}
 						// Nudge animation after page load.
 						window.addEventListener('load', function() {
 							setTimeout(function() {
@@ -680,37 +237,22 @@ class DWM_Admin {
 					<?php
 				}
 			);
-		} else {
-			if ( empty( $widgets ) ) {
-				// No widgets — direct link to create page.
-				wp_add_inline_script( 'jquery', '
-					document.addEventListener("DOMContentLoaded", function() {
-						var heading = document.querySelector("#wpbody-content .wrap h1");
-						if ( ! heading ) { return; }
-						var btn = document.createElement("a");
-						btn.href = "' . $create_url . '";
-						btn.className = "dwm-dashboard-new-widget-btn";
-						btn.innerHTML = \'<span class="dashicons dashicons-plus-alt2"></span>' . $button_label . '\';
-						heading.appendChild(btn);
-					});
-				' );
-			} else {
-				// Widgets exist — button opens picker modal.
-				add_action( 'admin_footer', array( $this, 'render_widget_picker_modal' ) );
 
-				wp_add_inline_script( 'jquery', '
-					document.addEventListener("DOMContentLoaded", function() {
-						var heading = document.querySelector("#wpbody-content .wrap h1");
-						if ( ! heading ) { return; }
-						var btn = document.createElement("button");
-						btn.type = "button";
-						btn.id = "dwm-open-widget-picker";
-						btn.className = "dwm-dashboard-new-widget-btn";
-						btn.innerHTML = \'<span class="dashicons dashicons-plus-alt2"></span>' . $button_label . '\';
-						heading.appendChild(btn);
-					});
-				' );
-			}
+		// Always render the picker modal when widgets exist.
+		if ( ! empty( $widgets ) ) {
+			add_action( 'admin_footer', array( $this, 'render_widget_picker_modal' ) );
+
+			// Hidden trigger button for the FAB "Add Widget" action.
+			wp_add_inline_script( 'jquery', '
+				document.addEventListener("DOMContentLoaded", function() {
+					if (document.getElementById("dwm-open-widget-picker")) { return; }
+					var btn = document.createElement("button");
+					btn.type = "button";
+					btn.id = "dwm-open-widget-picker";
+					btn.style.display = "none";
+					document.body.appendChild(btn);
+				});
+			' );
 		}
 
 		// Hide selected dashboard widgets and their Screen Options entries.
@@ -898,13 +440,20 @@ class DWM_Admin {
 	}
 
 	/**
-	 * Hide Help and/or Screen Options on all admin pages when enabled in settings.
+	 * Hide Help and/or Screen Options on the dashboard page when enabled in settings.
+	 *
+	 * @param string $hook Current admin page hook.
 	 */
-	public function hide_admin_chrome() {
+	public function hide_admin_chrome( $hook ) {
+		if ( 'index.php' !== $hook ) {
+			return;
+		}
+
 		$data             = DWM_Data::get_instance();
 		$settings         = $data->get_settings();
 		$hide_help        = ! empty( $settings['hide_help_dropdown'] );
 		$hide_screen_opts = ! empty( $settings['hide_screen_options'] );
+		$hide_notices     = ! empty( $settings['hide_inline_notices'] );
 
 		$css = '';
 		if ( $hide_help ) {
@@ -912,6 +461,9 @@ class DWM_Admin {
 		}
 		if ( $hide_screen_opts ) {
 			$css .= '#screen-options-link-wrap { display: none !important; }';
+		}
+		if ( $hide_notices ) {
+			$css .= 'body.index-php .notice, body.index-php .updated, body.index-php .error { display: none !important; }';
 		}
 
 		if ( $css ) {
@@ -957,7 +509,9 @@ class DWM_Admin {
 						<span class="dashicons dashicons-layout"></span>
 						<?php esc_html_e( 'Dashboard Widget', 'dashboard-widget-manager' ); ?>
 					</h2>
-					<button type="button" id="dwm-picker-close" aria-label="<?php esc_attr_e( 'Close', 'dashboard-widget-manager' ); ?>">&times;</button>
+					<button type="button" class="dwm-modal-close" id="dwm-picker-close" aria-label="Close modal">
+						<span class="dashicons dashicons-no-alt"></span>
+					</button>
 				</div>
 				<div class="dwm-picker-body">
 
@@ -1426,8 +980,8 @@ class DWM_Admin {
 		}
 		$hide_title = 'hide' === $title_mode;
 
-		$bg_type = sanitize_key( (string) ( $settings['dashboard_background_type'] ?? 'default' ) );
-		$bg_type = in_array( $bg_type, array( 'default', 'solid', 'gradient' ), true ) ? $bg_type : 'default';
+		$bg_type = sanitize_key( (string) ( $settings['dashboard_background_type'] ?? 'solid' ) );
+		$bg_type = in_array( $bg_type, array( 'solid', 'gradient' ), true ) ? $bg_type : 'solid';
 		$solid_bg = sanitize_hex_color( $settings['dashboard_bg_solid_color'] ?? '' ) ?: '#ffffff';
 		$grad_type = sanitize_key( (string) ( $settings['dashboard_bg_gradient_type'] ?? 'linear' ) );
 		$grad_type = in_array( $grad_type, array( 'linear', 'radial' ), true ) ? $grad_type : 'linear';
@@ -1473,30 +1027,11 @@ class DWM_Admin {
 		}
 		$title_color = sanitize_text_field( (string) ( $settings['dashboard_title_color'] ?? '#1d2327' ) );
 
-		$hero_theme = sanitize_key( (string) ( $settings['dashboard_hero_theme'] ?? 'text-left' ) );
-		if ( 'classic' === $hero_theme ) {
-			$hero_theme = 'text-left';
+		$hero_logo_mode = sanitize_key( (string) ( $settings['dashboard_hero_logo_mode'] ?? 'disabled' ) );
+		if ( ! in_array( $hero_logo_mode, array( 'disabled', 'hero_logo', 'logo_only', 'hero_only' ), true ) ) {
+			$hero_logo_mode = 'disabled';
 		}
-		if ( ! in_array( $hero_theme, array( 'text-left', 'text-center', 'text-right', 'text-split', 'logo-left', 'logo-top', 'logo-right', 'split' ), true ) ) {
-			$hero_theme = 'text-left';
-		}
-		$hero_bg_type = sanitize_key( (string) ( $settings['dashboard_hero_background_type'] ?? 'solid' ) );
-		if ( ! in_array( $hero_bg_type, array( 'solid', 'gradient' ), true ) ) {
-			$hero_bg_type = 'solid';
-		}
-		$hero_bg_solid = sanitize_hex_color( $settings['dashboard_hero_bg_solid_color'] ?? '' ) ?: '#667eea';
-		$hero_grad_type = sanitize_key( (string) ( $settings['dashboard_hero_bg_gradient_type'] ?? 'linear' ) );
-		if ( ! in_array( $hero_grad_type, array( 'linear', 'radial' ), true ) ) {
-			$hero_grad_type = 'linear';
-		}
-		$hero_grad_angle = isset( $settings['dashboard_hero_bg_gradient_angle'] ) ? (int) $settings['dashboard_hero_bg_gradient_angle'] : 90;
-		$hero_grad_angle = max( 0, min( 360, $hero_grad_angle ) );
-		$hero_grad_start = sanitize_hex_color( $settings['dashboard_hero_bg_gradient_start'] ?? '' ) ?: '#667eea';
-		$hero_grad_end   = sanitize_hex_color( $settings['dashboard_hero_bg_gradient_end'] ?? '' ) ?: '#764ba2';
-		$hero_grad_start_pos = isset( $settings['dashboard_hero_bg_gradient_start_position'] ) ? absint( $settings['dashboard_hero_bg_gradient_start_position'] ) : 0;
-		$hero_grad_end_pos   = isset( $settings['dashboard_hero_bg_gradient_end_position'] ) ? absint( $settings['dashboard_hero_bg_gradient_end_position'] ) : 100;
-		$hero_grad_start_pos = max( 0, min( 100, $hero_grad_start_pos ) );
-		$hero_grad_end_pos   = max( 0, min( 100, $hero_grad_end_pos ) );
+		$hero_mode_has_hero = in_array( $hero_logo_mode, array( 'hero_logo', 'hero_only' ), true );
 
 		$hero_title_font_family = sanitize_text_field( (string) ( $settings['dashboard_hero_title_font_family'] ?? 'inherit' ) );
 		$hero_title_font_size   = sanitize_text_field( (string) ( $settings['dashboard_hero_title_font_size'] ?? '28px' ) );
@@ -1513,8 +1048,23 @@ class DWM_Admin {
 		}
 		$hero_title_color = sanitize_text_field( (string) ( $settings['dashboard_hero_title_color'] ?? '#ffffff' ) );
 
+		$hero_message_font_family = sanitize_text_field( (string) ( $settings['dashboard_hero_message_font_family'] ?? 'inherit' ) );
+		$hero_message_font_size   = sanitize_text_field( (string) ( $settings['dashboard_hero_message_font_size'] ?? '24px' ) );
+		if ( ! preg_match( '/^\d+(?:\.\d+)?(px|rem|em)$/', $hero_message_font_size ) ) {
+			$hero_message_font_size = '24px';
+		}
+		$hero_message_font_weight = sanitize_text_field( (string) ( $settings['dashboard_hero_message_font_weight'] ?? '700' ) );
+		if ( ! in_array( $hero_message_font_weight, array( '300', '400', '500', '600', '700' ), true ) ) {
+			$hero_message_font_weight = '700';
+		}
+		$hero_message_alignment = sanitize_key( (string) ( $settings['dashboard_hero_message_alignment'] ?? 'left' ) );
+		if ( ! in_array( $hero_message_alignment, array( 'left', 'center', 'right' ), true ) ) {
+			$hero_message_alignment = 'left';
+		}
+		$hero_message_color = sanitize_text_field( (string) ( $settings['dashboard_hero_message_color'] ?? '#ffffff' ) );
+
 		$background_css = '';
-		if ( $bg_enabled && 'default' !== $bg_type ) {
+		if ( $bg_enabled && in_array( $bg_type, array( 'solid', 'gradient' ), true ) ) {
 			$background_css = 'gradient' === $bg_type
 				? ( 'radial' === $grad_type
 					? 'radial-gradient(' . $grad_start . ' ' . $grad_start_pos . '%, ' . $grad_end . ' ' . $grad_end_pos . '%)'
@@ -1522,303 +1072,49 @@ class DWM_Admin {
 				: $solid_bg;
 		}
 
-		// Hero spacing.
-		$hero_pad_top    = max( 0, min( 200, (int) ( $settings['dashboard_hero_padding_top'] ?? 16 ) ) );
-		$hero_pad_right  = max( 0, min( 200, (int) ( $settings['dashboard_hero_padding_right'] ?? 20 ) ) );
-		$hero_pad_bottom = max( 0, min( 200, (int) ( $settings['dashboard_hero_padding_bottom'] ?? 16 ) ) );
-		$hero_pad_left   = max( 0, min( 200, (int) ( $settings['dashboard_hero_padding_left'] ?? 20 ) ) );
-		$hero_pad_unit   = in_array( sanitize_key( (string) ( $settings['dashboard_hero_padding_unit'] ?? 'px' ) ), array( 'px', '%', 'rem', 'em' ), true ) ? sanitize_key( (string) $settings['dashboard_hero_padding_unit'] ) : 'px';
-		$hero_mar_top    = max( -200, min( 200, (int) ( $settings['dashboard_hero_margin_top'] ?? 10 ) ) );
-		$hero_mar_right  = max( -200, min( 200, (int) ( $settings['dashboard_hero_margin_right'] ?? 0 ) ) );
-		$hero_mar_bottom = max( -200, min( 200, (int) ( $settings['dashboard_hero_margin_bottom'] ?? 16 ) ) );
-		$hero_mar_left   = max( -200, min( 200, (int) ( $settings['dashboard_hero_margin_left'] ?? 0 ) ) );
-		$hero_mar_unit   = in_array( sanitize_key( (string) ( $settings['dashboard_hero_margin_unit'] ?? 'px' ) ), array( 'px', '%', 'rem', 'em' ), true ) ? sanitize_key( (string) $settings['dashboard_hero_margin_unit'] ) : 'px';
-		$hero_bdr_top    = max( 0, min( 20, (int) ( $settings['dashboard_hero_border_top'] ?? 0 ) ) );
-		$hero_bdr_right  = max( 0, min( 20, (int) ( $settings['dashboard_hero_border_right'] ?? 0 ) ) );
-		$hero_bdr_bottom = max( 0, min( 20, (int) ( $settings['dashboard_hero_border_bottom'] ?? 0 ) ) );
-		$hero_bdr_left   = max( 0, min( 20, (int) ( $settings['dashboard_hero_border_left'] ?? 0 ) ) );
-		$hero_bdr_unit   = in_array( sanitize_key( (string) ( $settings['dashboard_hero_border_unit'] ?? 'px' ) ), array( 'px', 'rem', 'em' ), true ) ? sanitize_key( (string) $settings['dashboard_hero_border_unit'] ) : 'px';
-		$hero_bdr_style_raw = sanitize_key( (string) ( $settings['dashboard_hero_border_style'] ?? 'none' ) );
-		$hero_bdr_style  = in_array( $hero_bdr_style_raw, array( 'none', 'solid', 'dashed', 'dotted', 'double' ), true ) ? $hero_bdr_style_raw : 'none';
-		$hero_bdr_color  = sanitize_hex_color( (string) ( $settings['dashboard_hero_border_color'] ?? '#dddddd' ) ) ?: '#dddddd';
-		$hero_rad_tl     = max( 0, min( 200, (int) ( $settings['dashboard_hero_border_radius_tl'] ?? 10 ) ) );
-		$hero_rad_tr     = max( 0, min( 200, (int) ( $settings['dashboard_hero_border_radius_tr'] ?? 10 ) ) );
-		$hero_rad_br     = max( 0, min( 200, (int) ( $settings['dashboard_hero_border_radius_br'] ?? 10 ) ) );
-		$hero_rad_bl     = max( 0, min( 200, (int) ( $settings['dashboard_hero_border_radius_bl'] ?? 10 ) ) );
-		$hero_rad_unit   = in_array( sanitize_key( (string) ( $settings['dashboard_hero_border_radius_unit'] ?? 'px' ) ), array( 'px', '%', 'rem', 'em' ), true ) ? sanitize_key( (string) $settings['dashboard_hero_border_radius_unit'] ) : 'px';
-		$hero_height     = max( 0, min( 1000, (int) ( $settings['dashboard_hero_height'] ?? 0 ) ) );
+		$hero_height      = max( 1, min( 1000, (int) ( $settings['dashboard_hero_height'] ?? 1 ) ) );
 		$hero_height_unit = in_array( sanitize_key( (string) ( $settings['dashboard_hero_height_unit'] ?? 'px' ) ), array( 'px', '%', 'rem', 'em', 'vh' ), true ) ? sanitize_key( (string) $settings['dashboard_hero_height_unit'] ) : 'px';
-		$hero_min_height = max( 0, min( 1000, (int) ( $settings['dashboard_hero_min_height'] ?? 0 ) ) );
+		$hero_min_height  = max( 1, min( 1000, (int) ( $settings['dashboard_hero_min_height'] ?? 1 ) ) );
 		$hero_min_height_unit = in_array( sanitize_key( (string) ( $settings['dashboard_hero_min_height_unit'] ?? 'px' ) ), array( 'px', '%', 'rem', 'em', 'vh' ), true ) ? sanitize_key( (string) $settings['dashboard_hero_min_height_unit'] ) : 'px';
 
-		$hero_background_css = 'gradient' === $hero_bg_type
-			? ( 'radial' === $hero_grad_type
-				? 'radial-gradient(' . $hero_grad_start . ' ' . $hero_grad_start_pos . '%, ' . $hero_grad_end . ' ' . $hero_grad_end_pos . '%)'
-				: 'linear-gradient(' . $hero_grad_angle . 'deg, ' . $hero_grad_start . ' ' . $hero_grad_start_pos . '%, ' . $hero_grad_end . ' ' . $hero_grad_end_pos . '%)' )
-			: $hero_bg_solid;
+		// Dynamic inline CSS — only properties that depend on PHP settings values.
+		$css = '';
 
-		$css = '
-			.dwm-dashboard-notice-toast {
-				position: fixed;
-				z-index: 100001;
-				min-width: 300px;
-				max-width: 460px;
-				padding: 12px 14px;
-				border-radius: 8px;
-				color: #fff;
-				box-shadow: 0 12px 28px rgba(0,0,0,0.2);
-				white-space: normal;
-			}
-			.dwm-dashboard-notice-toast.pos-top-right { top: 52px; right: 24px; }
-			.dwm-dashboard-notice-toast.pos-top-left { top: 52px; left: 24px; }
-			.dwm-dashboard-notice-toast.pos-bottom-right { bottom: 24px; right: 24px; }
-			.dwm-dashboard-notice-toast.pos-bottom-left { bottom: 24px; left: 24px; }
-			.dwm-dashboard-notice-dismiss {
-				position: absolute;
-				top: 6px;
-				right: 8px;
-				background: transparent;
-				border: 0;
-				color: rgba(255,255,255,0.8);
-				font-size: 18px;
-				cursor: pointer;
-				line-height: 1;
-				padding: 0 2px;
-			}
-			.dwm-dashboard-notice-dismiss:hover { color: #fff; }
-			.dwm-dashboard-notice-toast strong {
-				display: block;
-				margin-bottom: 4px;
-			}
-			.dwm-dashboard-notice-toast-message {
-				white-space: pre-line;
-			}
-			.dwm-dashboard-notice-toast.is-info { background: #2271b1; }
-			.dwm-dashboard-notice-toast.is-success { background: #17833f; }
-			.dwm-dashboard-notice-toast.is-warning { background: #b26200; }
-			.dwm-dashboard-notice-toast.is-error { background: #b32d2e; }
-			.dwm-dashboard-popup-overlay {
-				position: fixed;
-				inset: 0;
-				background: rgba(0, 0, 0, 0.55);
-				z-index: 100000;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				padding: 16px;
-			}
-			.dwm-dashboard-popup-modal {
-				width: min(560px, 100%);
-				background: #fff;
-				border-radius: 12px;
-				box-shadow: 0 24px 50px rgba(0,0,0,0.3);
-				overflow: hidden;
-			}
-			.dwm-dashboard-popup-header {
-				padding: 14px 16px;
-				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-				color: #fff;
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				font-size: 17px;
-				font-weight: 700;
-			}
-			.dwm-dashboard-popup-close {
-				border: 0;
-				background: transparent;
-				color: rgba(255,255,255,0.9);
-				font-size: 22px;
-				cursor: pointer;
-				line-height: 1;
-			}
-			.dwm-dashboard-popup-body {
-				padding: 16px;
-				font-size: 14px;
-				line-height: 1.5;
-				color: #1f2937;
-				white-space: pre-line;
-			}
-			.dwm-dashboard-hero {
-				background: ' . $hero_background_css . ';
-				color: #fff;
-				padding: ' . $hero_pad_top . $hero_pad_unit . ' ' . $hero_pad_right . $hero_pad_unit . ' ' . $hero_pad_bottom . $hero_pad_unit . ' ' . $hero_pad_left . $hero_pad_unit . ';
-				border-radius: ' . $hero_rad_tl . $hero_rad_unit . ' ' . $hero_rad_tr . $hero_rad_unit . ' ' . $hero_rad_br . $hero_rad_unit . ' ' . $hero_rad_bl . $hero_rad_unit . ';
-				margin: ' . $hero_mar_top . $hero_mar_unit . ' ' . $hero_mar_right . $hero_mar_unit . ' ' . $hero_mar_bottom . $hero_mar_unit . ' ' . $hero_mar_left . $hero_mar_unit . ';
-				' . ( 'none' !== $hero_bdr_style ? 'border: ' . $hero_bdr_top . $hero_bdr_unit . ' ' . $hero_bdr_style . ' ' . esc_attr( $hero_bdr_color ) . ';' : '' ) . '
-				' . ( $hero_height > 0 ? 'height: ' . $hero_height . $hero_height_unit . ';' : '' ) . '
-				' . ( $hero_min_height > 0 ? 'min-height: ' . $hero_min_height . $hero_min_height_unit . ';' : '' ) . '
-				box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
-				display: grid;
-				grid-template-columns: 1fr;
-				gap: 10px;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-left {
-				grid-template-columns: auto 1fr;
-				align-items: center;
-				column-gap: 16px;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-right {
-				grid-template-columns: 1fr auto;
-				align-items: center;
-				column-gap: 16px;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-top {
-				justify-items: center;
-				text-align: center;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-split {
-				grid-template-columns: 1fr auto;
-				align-items: center;
-				column-gap: 18px;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-split .dwm-dashboard-hero-content {
-				order: 1;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-split .dwm-dashboard-hero-logo-wrap {
-				order: 2;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-text-center {
-				text-align: center;
-				justify-items: center;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-text-right {
-				text-align: right;
-				justify-items: end;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-text-split .dwm-dashboard-hero-title {
-				margin-bottom: 0;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-text-split .dwm-dashboard-hero-content {
-				display: grid;
-				grid-template-columns: minmax(220px, auto) minmax(0, 1fr);
-				align-items: start;
-				column-gap: 24px;
-				row-gap: 12px;
-				width: 100%;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-text-split .dwm-dashboard-hero-message {
-				margin-top: 0;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-right .dwm-dashboard-hero-content {
-				order: 1;
-			}
-			.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-right .dwm-dashboard-hero-logo-wrap {
-				order: 2;
-			}
-			.dwm-dashboard-hero-content {
-				min-width: 0;
-			}
-			.dwm-dashboard-hero-title {
-				margin: 0 0 6px;
-				color: #fff;
-				font-size: 21px;
-				line-height: 1.2;
-			}
-			.dwm-dashboard-hero-message {
-				margin: 0;
-				color: rgba(255, 255, 255, 0.92);
-			}
-			.dwm-dashboard-hero-message p {
-				margin: 0 0 10px;
-			}
-			.dwm-dashboard-hero-message p:last-child {
-				margin-bottom: 0;
-			}
-			.dwm-dashboard-hero-logo-wrap {
-				display: flex;
-				align-items: center;
-				justify-content: center;
-			}
-			.dwm-dashboard-hero-logo-wrap .dwm-dashboard-logo-wrap {
-				width: auto;
-				max-width: 100%;
-				display: inline-flex;
-				align-items: center;
-				justify-content: center;
-			}
-			.dwm-dashboard-logo {
-				max-width: none;
-				height: ' . $logo_height . $logo_height_unit . ';
-				width: auto;
-				display: block;
-				margin: 0;
-				padding: ' . $logo_padding_top . $logo_padding_unit . ' ' . $logo_padding_right . $logo_padding_unit . ' ' . $logo_padding_bottom . $logo_padding_unit . ' ' . $logo_padding_left . $logo_padding_unit . ';
-			}
-			.dwm-dashboard-logo-link {
-				display: inline-block;
-				max-width: 100%;
-			}
-			.dwm-dashboard-logo-wrap {
-				display: inline-block;
-				margin: ' . $logo_margin_top . $logo_margin_unit . ' ' . $logo_margin_right . $logo_margin_unit . ' ' . $logo_margin_bottom . $logo_margin_unit . ' ' . $logo_margin_left . $logo_margin_unit . ';
-				' . ( 'gradient' === $logo_bg_type ? 'background:' . ( 'radial' === $logo_bg_grad_type ? 'radial-gradient(' : 'linear-gradient(' . $logo_bg_grad_angle . 'deg,' ) . esc_attr( $logo_bg_grad_start ) . ' ' . $logo_bg_grad_start_pos . '%,' . esc_attr( $logo_bg_grad_end ) . ' ' . $logo_bg_grad_end_pos . '%);' : ( 'solid' === $logo_bg_type && $logo_bg_solid ? 'background-color:' . esc_attr( $logo_bg_solid ) . ';' : '' ) ) . '
-				' . ( 'none' !== $logo_border_style ? 'border-top:' . $logo_border_top . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';border-right:' . $logo_border_right . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';border-bottom:' . $logo_border_bottom . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';border-left:' . $logo_border_left . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';' : '' ) . '
-				' . ( ( $logo_radius_tl + $logo_radius_tr + $logo_radius_br + $logo_radius_bl ) > 0 ? 'border-radius:' . $logo_radius_tl . $logo_border_radius_unit . ' ' . $logo_radius_tr . $logo_border_radius_unit . ' ' . $logo_radius_br . $logo_border_radius_unit . ' ' . $logo_radius_bl . $logo_border_radius_unit . ';' : '' ) . '
-			}
-			.dwm-dashboard-logo-wrap--hero {
-				width: auto;
-				max-width: 100%;
-				display: inline-flex;
-			}
-			.dwm-dashboard-logo-wrap--standalone {
-				display: block;
-				position: absolute;
-				top: 100px;
-				z-index: 10;
-			}
-			.dwm-dashboard-logo-wrap--standalone.dwm-dashboard-logo-wrap--align-left {
-				left: 40px;
-			}
-			.dwm-dashboard-logo-wrap--standalone.dwm-dashboard-logo-wrap--align-center {
-				left: 50%;
-				transform: translateX(-50%);
-			}
-			.dwm-dashboard-logo-wrap--standalone.dwm-dashboard-logo-wrap--align-right {
-				right: 40px;
-			}
-			body.index-php.dwm-dashboard-title-hidden .wrap > h1 {
-				display: none !important;
-			}
-			body.index-php.dwm-dashboard-title-hidden .dwm-dashboard-new-widget-btn {
-				position: fixed;
-				top: 52px;
-				right: 20px;
-				z-index: 100001;
-				margin-left: 0;
-			}
-			@media (max-width: 782px) {
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-left,
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-right,
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-split,
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-text-split .dwm-dashboard-hero-content {
-					grid-template-columns: 1fr;
-				}
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-right .dwm-dashboard-hero-content,
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-logo-right .dwm-dashboard-hero-logo-wrap,
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-split .dwm-dashboard-hero-content,
-				.dwm-dashboard-hero.dwm-dashboard-hero-theme-split .dwm-dashboard-hero-logo-wrap {
-					order: initial;
-				}
-				.dwm-dashboard-notice-toast {
-					left: 16px;
-					right: 16px;
-					min-width: 0;
-					max-width: none;
-				}
-			}
-		';
-
-		if ( '' !== $background_css || '' !== $padding_css ) {
-			$css .= ( '' !== $background_css
-					? 'body.index-php{background:' . $background_css . '!important;background-attachment:fixed!important;}'
-					  . 'body.index-php #wpbody-content{background:transparent!important;min-height:calc(100vh - 32px);}'
-					: '' ) .
-				( '' !== $padding_css ? 'body.index-php #wpbody-content{padding:' . $padding_css . ';}' : '' ) .
-				'body.index-php #dashboard-widgets-wrap{margin-top:10px;}';
+		// Hero height/min-height only (structural, not styled).
+		if ( $hero_mode_has_hero && ( $hero_height > 0 || $hero_min_height > 0 ) ) {
+			$css .= '.dwm-dashboard-hero{'
+				. ( $hero_height > 0 ? 'height:' . $hero_height . $hero_height_unit . ';' : '' )
+				. ( $hero_min_height > 0 ? 'min-height:' . $hero_min_height . $hero_min_height_unit . ';' : '' )
+				. '}';
 		}
 
-		wp_add_inline_style( 'dwm-admin', $css );
+		// Style target: logo settings apply to the hero when hero mode is active, or to the logo wrap otherwise.
+		$style_target = $hero_mode_has_hero ? '.dwm-dashboard-hero' : '.dwm-dashboard-logo-wrap';
+
+		// Logo dynamic properties (height, padding, margin, background, border from settings).
+		$css .= '.dwm-dashboard-logo{'
+			. 'height:' . $logo_height . $logo_height_unit . ';'
+			. '}';
+
+		$css .= $style_target . '{'
+			. 'padding:' . $logo_padding_top . $logo_padding_unit . ' ' . $logo_padding_right . $logo_padding_unit . ' ' . $logo_padding_bottom . $logo_padding_unit . ' ' . $logo_padding_left . $logo_padding_unit . ';'
+			. 'margin:' . $logo_margin_top . $logo_margin_unit . ' ' . $logo_margin_right . $logo_margin_unit . ' ' . $logo_margin_bottom . $logo_margin_unit . ' ' . $logo_margin_left . $logo_margin_unit . ';'
+			. ( 'gradient' === $logo_bg_type ? 'background:' . ( 'radial' === $logo_bg_grad_type ? 'radial-gradient(' : 'linear-gradient(' . $logo_bg_grad_angle . 'deg,' ) . esc_attr( $logo_bg_grad_start ) . ' ' . $logo_bg_grad_start_pos . '%,' . esc_attr( $logo_bg_grad_end ) . ' ' . $logo_bg_grad_end_pos . '%);' : ( 'solid' === $logo_bg_type && $logo_bg_solid ? 'background-color:' . esc_attr( $logo_bg_solid ) . ';' : '' ) )
+			. ( 'none' !== $logo_border_style ? 'border-top:' . $logo_border_top . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';border-right:' . $logo_border_right . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';border-bottom:' . $logo_border_bottom . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';border-left:' . $logo_border_left . $logo_border_unit . ' ' . $logo_border_style . ' ' . esc_attr( $logo_border_color ) . ';' : '' )
+			. ( ( $logo_radius_tl + $logo_radius_tr + $logo_radius_br + $logo_radius_bl ) > 0 ? 'border-radius:' . $logo_radius_tl . $logo_border_radius_unit . ' ' . $logo_radius_tr . $logo_border_radius_unit . ' ' . $logo_radius_br . $logo_border_radius_unit . ' ' . $logo_radius_bl . $logo_border_radius_unit . ';' : '' )
+			. '}';
+
+		// Background and padding overrides (dynamic from settings).
+		if ( '' !== $background_css || '' !== $padding_css ) {
+			$css .= ( '' !== $background_css
+					? '#wpbody-content{background:' . $background_css . '!important;background-attachment:fixed!important;}'
+					: '' )
+				. ( '' !== $padding_css ? '#wpbody-content{padding:' . $padding_css . ';box-sizing:border-box;}' : '' )
+				. 'body.index-php #wpbody-content .wrap{overflow:hidden;}'
+				. 'body.index-php #dashboard-widgets-wrap{margin-top:10px;}';
+		}
+
+		wp_add_inline_style( 'dwm-wp-dashboard', $css );
 
 		$payload = array(
 			'logoEnabled'     => $logo_enabled,
@@ -1835,15 +1131,19 @@ class DWM_Admin {
 			'logoLinkEnabled' => ! empty( $logo_link_url ),
 			'logoLinkUrl'     => $logo_link_url,
 			'logoLinkNewTab'  => ! empty( $settings['dashboard_logo_link_new_tab'] ),
-			'heroEnabled'     => ! empty( $settings['dashboard_hero_enabled'] ),
-			'heroTheme'       => $hero_theme,
+			'heroEnabled'     => $hero_mode_has_hero,
 			'heroTitle'       => sanitize_text_field( (string) ( $settings['dashboard_hero_title'] ?? '' ) ),
 			'heroTitleFontFamily' => $hero_title_font_family,
 			'heroTitleFontSize'   => $hero_title_font_size,
 			'heroTitleFontWeight' => $hero_title_font_weight,
 			'heroTitleAlignment'  => $hero_title_alignment,
 			'heroTitleColor'      => $hero_title_color,
-			'heroMessage'     => wp_kses_post( (string) ( $settings['dashboard_hero_message'] ?? '' ) ),
+			'heroMessage'            => wp_kses_post( (string) ( $settings['dashboard_hero_message'] ?? '' ) ),
+			'heroMessageFontFamily'  => $hero_message_font_family,
+			'heroMessageFontSize'    => $hero_message_font_size,
+			'heroMessageFontWeight'  => $hero_message_font_weight,
+			'heroMessageAlignment'   => $hero_message_alignment,
+			'heroMessageColor'       => $hero_message_color,
 			'noticeEnabled'     => ! empty( $settings['dashboard_notice_enabled'] ),
 			'noticeType'        => sanitize_key( (string) ( $settings['dashboard_notice_type'] ?? 'toast' ) ),
 			'noticeLevel'       => sanitize_key( (string) ( $settings['dashboard_notice_level'] ?? 'info' ) ),
@@ -1862,8 +1162,12 @@ class DWM_Admin {
 			function buildLogoNode(contextClass) {
 				if (!cfg.logoEnabled || !cfg.logoUrl) { return null; }
 
+				var container = document.createElement("div");
+				container.className = "dwm-dashboard-logo-container dwm-dashboard-logo-container--align-" + (cfg.logoAlignment || "left") + " " + (contextClass || "dwm-dashboard-logo-container--standalone");
+
 				var wrap = document.createElement("div");
-				wrap.className = "dwm-dashboard-logo-wrap dwm-dashboard-logo-wrap--align-" + (cfg.logoAlignment || "left") + " " + (contextClass || "dwm-dashboard-logo-wrap--standalone");
+				wrap.className = "dwm-dashboard-logo-wrap";
+
 				var logo = document.createElement("img");
 				logo.className = "dwm-dashboard-logo";
 				logo.src = cfg.logoUrl;
@@ -1883,7 +1187,8 @@ class DWM_Admin {
 					wrap.appendChild(logo);
 				}
 
-				return wrap;
+				container.appendChild(wrap);
+				return container;
 			}
 			function appendNoticeMessage(container, message) {
 				var body = document.createElement("div");
@@ -1916,35 +1221,20 @@ class DWM_Admin {
 					}
 				}
 
-				var heroTheme = String(cfg.heroTheme || "text-left");
-				if (heroTheme === "classic") { heroTheme = "text-left"; }
-				var logoThemes = ["logo-left", "logo-top", "logo-right", "split"];
+				var alignment = cfg.logoAlignment || "left";
 				var hasLogoForHero = cfg.logoEnabled && cfg.logoUrl;
-				if (!hasLogoForHero && logoThemes.indexOf(heroTheme) !== -1) {
-					heroTheme = "text-left";
-				}
-
-				if (cfg.logoEnabled && cfg.logoUrl && !cfg.heroEnabled && !document.getElementById("dwm-dashboard-custom-logo")) {
-					var logoWrap = buildLogoNode("dwm-dashboard-logo-wrap--standalone");
-					if (!logoWrap) { return; }
-					var standaloneLogo = logoWrap.querySelector(".dwm-dashboard-logo");
-					if (standaloneLogo) {
-						standaloneLogo.id = "dwm-dashboard-custom-logo";
-					}
-					if (h1 && h1.nextSibling) { h1.parentNode.insertBefore(logoWrap, h1.nextSibling); }
-					else if (h1 && h1.parentNode) { h1.parentNode.appendChild(logoWrap); }
-					else { wrap.prepend(logoWrap); }
-				}
 
 				if (cfg.heroEnabled && !document.getElementById("dwm-dashboard-hero")) {
 					var hero = document.createElement("section");
 					hero.id = "dwm-dashboard-hero";
-					hero.className = "dwm-dashboard-hero dwm-dashboard-hero-theme-" + heroTheme;
+					hero.className = "dwm-dashboard-hero dwm-dashboard-hero--align-" + alignment
+						+ (hasLogoForHero ? " dwm-dashboard-hero--has-logo" : "");
 					var heroContent = document.createElement("div");
 					heroContent.className = "dwm-dashboard-hero-content";
+					if (cfg.heroTitle) {
 					var heroTitle = document.createElement("h2");
 					heroTitle.className = "dwm-dashboard-hero-title";
-					heroTitle.textContent = safeText(cfg.heroTitle || "Dashboard");
+					heroTitle.textContent = safeText(cfg.heroTitle);
 					heroTitle.style.fontFamily = cfg.heroTitleFontFamily || "inherit";
 					heroTitle.style.fontSize = cfg.heroTitleFontSize || "28px";
 					heroTitle.style.fontWeight = cfg.heroTitleFontWeight || "700";
@@ -1958,25 +1248,61 @@ class DWM_Admin {
 					} else {
 						heroTitle.style.color = cfg.heroTitleColor || "#fff";
 					}
-					var heroMessage = document.createElement("div");
-					heroMessage.className = "dwm-dashboard-hero-message";
-					heroMessage.innerHTML = String(cfg.heroMessage || "");
 					heroContent.appendChild(heroTitle);
-					heroContent.appendChild(heroMessage);
+				}
+					var heroMessageText = String(cfg.heroMessage || "").trim();
+					if (heroMessageText) {
+						var heroMessage = document.createElement("div");
+						heroMessage.className = "dwm-dashboard-hero-message";
+						heroMessage.innerHTML = heroMessageText;
+						heroMessage.style.fontFamily = cfg.heroMessageFontFamily || "inherit";
+						heroMessage.style.fontSize = cfg.heroMessageFontSize || "24px";
+						heroMessage.style.fontWeight = cfg.heroMessageFontWeight || "700";
+						heroMessage.style.textAlign = cfg.heroMessageAlignment || "left";
+						if (cfg.heroMessageColor && cfg.heroMessageColor.indexOf("gradient") !== -1) {
+							heroMessage.style.backgroundImage = cfg.heroMessageColor;
+							heroMessage.style.webkitBackgroundClip = "text";
+							heroMessage.style.backgroundClip = "text";
+							heroMessage.style.color = "transparent";
+							heroMessage.style.webkitTextFillColor = "transparent";
+						} else {
+							heroMessage.style.color = cfg.heroMessageColor || "#fff";
+						}
+						heroContent.appendChild(heroMessage);
+					}
 
-					if (logoThemes.indexOf(heroTheme) !== -1 && cfg.logoEnabled && cfg.logoUrl) {
+					// Embed logo inside hero when hero_logo mode has a logo.
+					if (hasLogoForHero) {
 						var heroLogoWrap = document.createElement("div");
 						heroLogoWrap.className = "dwm-dashboard-hero-logo-wrap";
-						var heroLogoNode = buildLogoNode("dwm-dashboard-logo-wrap--hero");
+						var heroLogoNode = buildLogoNode("dwm-dashboard-logo-container--hero");
 						if (heroLogoNode) {
 							heroLogoWrap.appendChild(heroLogoNode);
 						}
-						hero.appendChild(heroLogoWrap);
+						// Logo left/right: logo wrap precedes or follows content.
+						if (alignment === "right") {
+							hero.appendChild(heroContent);
+							hero.appendChild(heroLogoWrap);
+						} else {
+							hero.appendChild(heroLogoWrap);
+							hero.appendChild(heroContent);
+						}
+					} else {
+						hero.appendChild(heroContent);
 					}
-					hero.appendChild(heroContent);
 
-					var widgetsWrap = document.getElementById("dashboard-widgets-wrap");
-					if (widgetsWrap && widgetsWrap.parentNode) { widgetsWrap.parentNode.insertBefore(hero, widgetsWrap); } else { wrap.appendChild(hero); }
+					if (h1) { h1.parentNode.insertBefore(hero, h1); }
+					else { wrap.prepend(hero); }
+				} else if (cfg.logoEnabled && cfg.logoUrl && !document.getElementById("dwm-dashboard-custom-logo")) {
+					var logoWrap = buildLogoNode("dwm-dashboard-logo-container--standalone");
+					if (logoWrap) {
+						var standaloneLogo = logoWrap.querySelector(".dwm-dashboard-logo");
+						if (standaloneLogo) {
+							standaloneLogo.id = "dwm-dashboard-custom-logo";
+						}
+						if (h1) { h1.parentNode.insertBefore(logoWrap, h1); }
+						else { wrap.prepend(logoWrap); }
+					}
 				}
 
 				if (cfg.noticeEnabled && cfg.noticeMessage) {
@@ -1988,9 +1314,9 @@ class DWM_Admin {
 						if (shouldShow) { window.sessionStorage.setItem(storageKey, "1"); }
 					} else if (freq === "once-day") {
 						var lastSeen = window.localStorage.getItem(storageKey);
-						var today = new Date().toDateString();
-						shouldShow = lastSeen !== today;
-						if (shouldShow) { window.localStorage.setItem(storageKey, today); }
+						var lastSeenTs = lastSeen ? parseInt(lastSeen, 10) : 0;
+						shouldShow = isNaN(lastSeenTs) || (Date.now() - lastSeenTs) >= 86400000;
+						if (shouldShow) { window.localStorage.setItem(storageKey, String(Date.now())); }
 					}
 					if (shouldShow) {
 					if (cfg.noticeType === "alert") {
@@ -2000,32 +1326,50 @@ class DWM_Admin {
 						p.style.whiteSpace = "pre-line";
 						p.textContent = (cfg.noticeTitle ? (cfg.noticeTitle + ": ") : "") + cfg.noticeMessage;
 						alertBox.appendChild(p);
+						if (cfg.noticeDismissible) {
+							var alertDismissBtn = document.createElement("button");
+							alertDismissBtn.type = "button";
+							alertDismissBtn.className = "notice-dismiss";
+							alertDismissBtn.setAttribute("aria-label", "Dismiss this notice");
+							alertDismissBtn.addEventListener("click", function(){ if (alertBox.parentNode) { alertBox.parentNode.removeChild(alertBox); } });
+							alertBox.appendChild(alertDismissBtn);
+						}
 						var target = document.querySelector("#wpbody-content .wrap");
 						if (target) { target.prepend(alertBox); }
+						var alertAutoDismiss = parseInt(cfg.noticeAutoDismiss, 10);
+						if (alertAutoDismiss > 0) {
+							window.setTimeout(function(){ if (alertBox && alertBox.parentNode) { alertBox.parentNode.removeChild(alertBox); } }, alertAutoDismiss * 1000);
+						}
 					} else if (cfg.noticeType === "popup") {
 						var overlay = document.createElement("div");
-						overlay.className = "dwm-dashboard-popup-overlay";
+						overlay.className = "dwm-dashboard-popup-overlay dwm-announcement--" + (cfg.noticeLevel || "info");
 						var modal = document.createElement("div");
 						modal.className = "dwm-dashboard-popup-modal";
 						var modalHeader = document.createElement("div");
 						modalHeader.className = "dwm-dashboard-popup-header";
 						var modalTitle = document.createElement("span");
 						modalTitle.textContent = safeText(cfg.noticeTitle || "Notice");
-						var modalClose = document.createElement("button");
-						modalClose.type = "button";
-						modalClose.className = "dwm-dashboard-popup-close";
-						modalClose.setAttribute("aria-label", "Close");
-						modalClose.innerHTML = "&times;";
+						modalHeader.appendChild(modalTitle);
+						if (cfg.noticeDismissible) {
+							var modalClose = document.createElement("button");
+							modalClose.type = "button";
+							modalClose.className = "dwm-dashboard-popup-close";
+							modalClose.setAttribute("aria-label", "Close");
+							modalClose.innerHTML = "&times;";
+							modalHeader.appendChild(modalClose);
+						}
 						var modalBody = document.createElement("div");
 						modalBody.className = "dwm-dashboard-popup-body";
 						modalBody.textContent = safeText(cfg.noticeMessage);
-						modalHeader.appendChild(modalTitle);
-						modalHeader.appendChild(modalClose);
 						modal.appendChild(modalHeader);
 						modal.appendChild(modalBody);
 						overlay.appendChild(modal);
 						document.body.appendChild(overlay);
-						overlay.addEventListener("click", function(e){ if (e.target === overlay || e.target.classList.contains("dwm-dashboard-popup-close")) { overlay.remove(); }});
+						overlay.addEventListener("click", function(e){ if (e.target === overlay || (cfg.noticeDismissible && e.target.classList.contains("dwm-dashboard-popup-close"))) { overlay.remove(); }});
+						var popupAutoDismiss = parseInt(cfg.noticeAutoDismiss, 10);
+						if (popupAutoDismiss > 0) {
+							window.setTimeout(function(){ if (overlay && overlay.parentNode) { overlay.parentNode.removeChild(overlay); } }, popupAutoDismiss * 1000);
+						}
 					} else {
 						var posClass = "pos-" + (cfg.noticePosition || "bottom-right");
 						var toast = document.createElement("div");

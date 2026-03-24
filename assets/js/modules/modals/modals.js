@@ -67,6 +67,50 @@ function inferSourceModal(options, targetId) {
 }
 
 /**
+ * Trap keyboard focus within a modal element while it is open.
+ * Stores the handler on the element so it can be removed by closeModal.
+ *
+ * @param {Element} modalEl Native DOM element for the open modal
+ */
+function trapFocus(modalEl) {
+	const focusableSelectors = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+	const $modal = $(modalEl);
+
+	const $focusables = $modal.find(focusableSelectors).filter(':visible');
+	if ($focusables.length) {
+		$focusables.get(0).focus();
+	} else {
+		modalEl.focus();
+	}
+
+	function handleKeydown(e) {
+		if (e.key !== 'Tab') return;
+
+		const $current = $modal.find(focusableSelectors).filter(':visible');
+		if (!$current.length) return;
+
+		const first = $current.get(0);
+		const last  = $current.get($current.length - 1);
+		const active = document.activeElement;
+
+		if (e.shiftKey && active === first) {
+			e.preventDefault();
+			last.focus();
+		} else if (!e.shiftKey && active === last) {
+			e.preventDefault();
+			first.focus();
+		}
+	}
+
+	// Store handler on element so closeModal can remove it
+	if (modalEl._dwmTrapFocusHandler) {
+		document.removeEventListener('keydown', modalEl._dwmTrapFocusHandler);
+	}
+	modalEl._dwmTrapFocusHandler = handleKeydown;
+	document.addEventListener('keydown', handleKeydown);
+}
+
+/**
  * Open modal
  *
  * @param {string|Element|jQuery} modalTarget Modal element ID, selector, element, or jQuery object
@@ -91,6 +135,7 @@ export function openModal(modalTarget, options = {}) {
 	// Reset scroll after display:none is removed
 	$modal.find( '.dwm-modal-body, [data-docs-content]' ).scrollTop( 0 );
 	$(document).trigger('dwmModalOpened', [$modal, modalId]);
+	trapFocus($modal.get(0));
 }
 
 /**
@@ -103,6 +148,11 @@ export function closeModal( modalId ) {
 	if ( modalId ) {
 		const $modal = normalizeModalTarget(modalId);
 		const closedModalId = $modal.attr('id') || '';
+		const modalEl = $modal.get(0);
+		if (modalEl && modalEl._dwmTrapFocusHandler) {
+			document.removeEventListener('keydown', modalEl._dwmTrapFocusHandler);
+			delete modalEl._dwmTrapFocusHandler;
+		}
 		$modal.removeClass( 'active' );
 		$modal.removeAttr('data-modal-open-order');
 		$modal.css({ 'z-index': '', 'pointer-events': '' });
@@ -112,6 +162,11 @@ export function closeModal( modalId ) {
 		$( '.dwm-modal.active' ).each(function() {
 			const $modal = $(this);
 			const closedModalId = $modal.attr('id') || '';
+			const modalEl = this;
+			if (modalEl._dwmTrapFocusHandler) {
+				document.removeEventListener('keydown', modalEl._dwmTrapFocusHandler);
+				delete modalEl._dwmTrapFocusHandler;
+			}
 			$modal
 				.removeClass('active')
 				.removeAttr('data-modal-open-order')
